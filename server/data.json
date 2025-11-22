@@ -1,0 +1,26 @@
+{
+  "users": [
+    {
+      "id": "u1",
+      "email": "assistant@clinic.com",
+      "name": "Dr. Assistant",
+      "role": "assistant",
+      "password": "password"
+    }
+  ],
+  "patients": [
+    {
+      "id": "p1",
+      "name": "Sarah Connor",
+      "phone": "555-0199",
+      "email": "sarah@example.com"
+    },
+    {
+      "id": "p2",
+      "name": "John Wick",
+      "phone": "555-0122",
+      "email": "john@continental.com"
+    }
+  ],
+  "appointments": []
+}

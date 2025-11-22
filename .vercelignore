@@ -1,0 +1,19 @@
+# Ignore server files and local-only content when deploying frontend to Vercel
+server/
+server/**
+/db.js
+/data.json
+*.local
+node_modules/
+.vscode/
+*.log
+.git/
+README.md
+docs/
+
+# Keep source needed for frontend build
+!package.json
+!vite.config.ts
+!index.html
+!src/
+!public/
