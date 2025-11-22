@@ -1,0 +1,11 @@
+/* Minimal index.css included so build-time reference resolves.
+   You can add global styles here; tailwind is loaded via CDN in index.html.
+*/
+html, body, #root {
+  height: 100%;
+}
+body {
+  margin: 0;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
