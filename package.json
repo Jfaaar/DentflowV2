@@ -1,0 +1,49 @@
+{
+  "name": "dentflow-manager",
+  "version": "1.0.0",
+  "description": "Medical Cabinet Management",
+  "main": "server/index.js",
+  "engines": {
+    "node": ">=14.x"
+  },
+  "scripts": {
+    "start": "node server/index.js",
+    "client": "react-scripts start",
+    "build": "react-scripts build",
+    "test": "react-scripts test",
+    "eject": "react-scripts eject",
+    "server": "node server/index.js",
+    "dev": "concurrently \"npm run server\" \"npm run client\""
+  },
+  "proxy": "http://localhost:3001",
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-scripts": "5.0.1",
+    "lucide-react": "^0.344.0",
+    "clsx": "^2.1.1",
+    "tailwind-merge": "^2.2.1",
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "body-parser": "^1.20.2",
+    "concurrently": "^8.2.2"
+  },
+  "devDependencies": {
+    "typescript": "^4.9.5",
+    "@types/node": "^16.18.0",
+    "@types/react": "^18.2.0",
+    "@types/react-dom": "^18.2.0"
+  },
+  "browserslist": {
+    "production": [
+      ">0.2%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
+  }
+}
