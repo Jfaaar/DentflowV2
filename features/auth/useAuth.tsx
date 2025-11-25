@@ -17,12 +17,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     dispatch({ type: 'LOGIN_START' });
 
     try {
+      // 1. Authenticate with Server
       const user = await api.auth.login(credentials);
-      // Persist generic token or user object for simple V1
+      
+      // 2. Persist Session Locally (so refreshing page doesn't log out)
       localStorage.setItem('dentflow_user', JSON.stringify(user));
+      
       dispatch({ type: 'LOGIN_SUCCESS', payload: user });
     } catch (err: any) {
-      // Handle both Error objects and string rejections
       const errorMessage = err instanceof Error ? err.message : (typeof err === 'string' ? err : 'Login failed');
       dispatch({ type: 'LOGIN_FAILURE', payload: errorMessage });
     }

@@ -88,7 +88,7 @@ export const WeekView: React.FC<WeekViewProps> = ({ currentDate, appointments, o
                                 {hours.map((hour) => (
                                     <div 
                                         key={hour} 
-                                        className="flex-1 border-b border-surface-100 dark:border-surface-800 hover:bg-surface-50 dark:hover:bg-surface-800/50 transition-colors cursor-pointer"
+                                        className="flex-1 border-b border-surface-100 dark:border-surface-800 hover:bg-primary-50/50 dark:hover:bg-primary-900/10 transition-colors cursor-pointer"
                                         onClick={() => {
                                             const d = new Date(date);
                                             d.setHours(hour, 0, 0, 0);

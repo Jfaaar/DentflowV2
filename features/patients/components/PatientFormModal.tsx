@@ -1,10 +1,10 @@
-
 import React, { useState, useEffect } from 'react';
 import { Modal } from '../../../components/ui/Modal';
 import { Input } from '../../../components/ui/Input';
 import { Button } from '../../../components/ui/Button';
 import { Patient } from '../../../types';
-import { User, Globe, Mail, Phone } from 'lucide-react';
+import { User, Mail, Phone } from 'lucide-react';
+import { useLanguage } from '../../../features/language/LanguageContext';
 
 interface PatientFormModalProps {
   isOpen: boolean;
@@ -19,6 +19,7 @@ export const PatientFormModal: React.FC<PatientFormModalProps> = ({
   onSubmit,
   initialData
 }) => {
+  const { t } = useLanguage();
   const [formData, setFormData] = useState({
     name: '',
     countryCode: '+212',
@@ -34,7 +35,6 @@ export const PatientFormModal: React.FC<PatientFormModalProps> = ({
         let code = '+212';
         let num = initialData.phone;
 
-        // Check if phone starts with + (e.g. +212 600...)
         const match = initialData.phone.match(/^(\+\d+)\s*(.*)$/);
         if (match) {
             code = match[1];
@@ -66,7 +66,6 @@ export const PatientFormModal: React.FC<PatientFormModalProps> = ({
       return;
     }
 
-    // Combine code and number
     const fullPhone = `${formData.countryCode.trim()} ${formData.phone.trim()}`;
 
     onSubmit({
@@ -78,18 +77,17 @@ export const PatientFormModal: React.FC<PatientFormModalProps> = ({
     onClose();
   };
 
-  // Simple helper to get flag based on code
   const getCountryFlag = (code: string) => {
     const cleanCode = code.replace('+', '').trim();
     switch (cleanCode) {
-        case '212': return '🇲🇦'; // Morocco
-        case '33': return '🇫🇷';  // France
-        case '1': return '🇺🇸';   // USA
-        case '34': return '🇪🇸';  // Spain
-        case '39': return '🇮🇹';  // Italy
-        case '44': return '🇬🇧';  // UK
-        case '971': return '🇦🇪'; // UAE
-        case '966': return '🇸🇦'; // KSA
+        case '212': return '🇲🇦'; 
+        case '33': return '🇫🇷';  
+        case '1': return '🇺🇸';   
+        case '34': return '🇪🇸';  
+        case '39': return '🇮🇹';  
+        case '44': return '🇬🇧';  
+        case '971': return '🇦🇪'; 
+        case '966': return '🇸🇦'; 
         default: return '🌐';
     }
   };
@@ -98,7 +96,7 @@ export const PatientFormModal: React.FC<PatientFormModalProps> = ({
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title={initialData ? "Edit Patient" : "Add New Patient"}
+      title={initialData ? t('editPatient') : t('addPatient')}
       maxWidth="md"
     >
       <form onSubmit={handleSubmit} className="space-y-6">
@@ -108,14 +106,13 @@ export const PatientFormModal: React.FC<PatientFormModalProps> = ({
                 <User size={32} />
             </div>
             <p className="text-sm text-surface-500 dark:text-surface-400">
-                {initialData ? 'Update patient information below' : 'Enter details for the new patient record'}
+                {initialData ? t('updatePatientDesc') : t('creatingPatientDesc')}
             </p>
         </div>
 
         <div className="space-y-5">
-          {/* Name Field */}
           <Input
-            label="Full Name"
+            label={t('fullName')}
             placeholder="e.g. John Doe"
             value={formData.name}
             onChange={e => setFormData({ ...formData, name: e.target.value })}
@@ -123,10 +120,9 @@ export const PatientFormModal: React.FC<PatientFormModalProps> = ({
             autoFocus
           />
           
-          {/* Phone Section */}
           <div className="space-y-1.5">
              <label className="block text-xs font-semibold text-surface-700 dark:text-surface-300 uppercase tracking-wider">
-                Phone Number
+                {t('phoneNumber')}
              </label>
              <div className="flex gap-3 items-start">
                 <div className="w-32 shrink-0 relative">
@@ -155,10 +151,9 @@ export const PatientFormModal: React.FC<PatientFormModalProps> = ({
              </div>
           </div>
 
-          {/* Email Field */}
           <div className="space-y-1.5">
              <label className="block text-xs font-semibold text-surface-700 dark:text-surface-300 uppercase tracking-wider">
-                Email Address (Optional)
+                {t('emailOptional')}
              </label>
              <div className="relative">
                 <Mail size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-surface-400" />
@@ -176,10 +171,10 @@ export const PatientFormModal: React.FC<PatientFormModalProps> = ({
 
         <div className="flex justify-end gap-3 pt-6 border-t border-surface-100 dark:border-surface-700 mt-4">
           <Button type="button" variant="ghost" onClick={onClose}>
-            Cancel
+            {t('cancel')}
           </Button>
           <Button type="submit" className="min-w-[120px]">
-            {initialData ? 'Update Patient' : 'Create Patient'}
+            {initialData ? t('updatePatientButton') : t('createPatientButton')}
           </Button>
         </div>
       </form>

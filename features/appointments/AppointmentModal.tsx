@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Modal } from '../../components/ui/Modal';
 import { Button } from '../../components/ui/Button';
 import { Appointment, AppointmentStatus, Patient } from '../../types';
@@ -6,6 +6,7 @@ import { cn } from '../../lib/utils';
 import { Clock, Calendar as CalendarIcon, User, Phone, Search, X, Lock, FileText, Activity, BookUser, Trash2, AlertTriangle, MessageCircle, CheckCircle } from 'lucide-react';
 import { api } from '../../lib/api';
 import { PatientDirectoryModal } from '../patients/PatientDirectoryModal';
+import { useLanguage } from '../../features/language/LanguageContext';
 
 interface AppointmentModalProps {
   isOpen: boolean;
@@ -27,6 +28,7 @@ export const AppointmentModal: React.FC<AppointmentModalProps> = ({
   initialAppointment,
   existingAppointments
 }) => {
+  const { t } = useLanguage();
   // --- State ---
   const [patients, setPatients] = useState<Patient[]>([]);
   const [isDirectoryOpen, setIsDirectoryOpen] = useState(false);
@@ -48,26 +50,28 @@ export const AppointmentModal: React.FC<AppointmentModalProps> = ({
     return slots;
   }, []);
 
+  // 1. Fetch Patients (Independent Effect)
   useEffect(() => {
     if (isOpen) {
       api.patients.list().then(setPatients);
     }
   }, [isOpen]);
 
+  // 2. Initialize Form Data (Date, Time, Status) - Decoupled from Patients
   useEffect(() => {
-    if (isOpen && patients.length > 0) {
+    if (isOpen) {
       if (initialAppointment) {
-        const foundPatient = patients.find(p => p.id === initialAppointment.patientId);
-        if (foundPatient) setSelectedPatient(foundPatient);
-        else if (initialAppointment.patientName) {
-             setSelectedPatient({ id: initialAppointment.patientId, name: initialAppointment.patientName, phone: 'Unknown' });
-        }
+        // --- Edit Mode ---
         setStatus(initialAppointment.status);
         setObservation(initialAppointment.observation || '');
         
         const startObj = new Date(initialAppointment.start);
         const endObj = new Date(initialAppointment.end);
-        setSelectedDate(startObj.toISOString().split('T')[0]);
+        
+        // Handle timezone for date input
+        const offset = startObj.getTimezoneOffset();
+        const localDate = new Date(startObj.getTime() - (offset * 60 * 1000));
+        setSelectedDate(localDate.toISOString().split('T')[0]);
         
         const slots = [];
         let current = new Date(startObj);
@@ -77,22 +81,42 @@ export const AppointmentModal: React.FC<AppointmentModalProps> = ({
           current.setMinutes(current.getMinutes() + 30);
         }
         setSelectedSlots(slots);
+
       } else {
+        // --- New Appointment Mode ---
         resetForm();
+        
         if (initialDate) {
+            // Handle timezone for date input
             const offset = initialDate.getTimezoneOffset(); 
-            const localDate = new Date(initialDate.getTime() - (offset*60*1000));
+            const localDate = new Date(initialDate.getTime() - (offset * 60 * 1000));
             setSelectedDate(localDate.toISOString().split('T')[0]);
+            
+            // Auto-select slot from Day View click
             const h = initialDate.getHours();
             const m = initialDate.getMinutes();
             if (h >= START_HOUR && h < END_HOUR) {
                 const timeStr = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
-                setSelectedSlots([timeStr]);
+                // Only auto-select if it matches our grid intervals (00 or 30)
+                if (m === 0 || m === 30) {
+                    setSelectedSlots([timeStr]);
+                }
             }
         }
       }
     }
-  }, [isOpen, initialAppointment, initialDate, patients]);
+  }, [isOpen, initialAppointment, initialDate]);
+
+  // 3. Match Patient for Edit Mode (Dependent on Patients)
+  useEffect(() => {
+    if (isOpen && initialAppointment && patients.length > 0) {
+        const foundPatient = patients.find(p => p.id === initialAppointment.patientId);
+        if (foundPatient) setSelectedPatient(foundPatient);
+        else if (initialAppointment.patientName) {
+             setSelectedPatient({ id: initialAppointment.patientId, name: initialAppointment.patientName, phone: 'Unknown' });
+        }
+    }
+  }, [isOpen, initialAppointment, patients]);
 
   const resetForm = () => {
     setSelectedPatient(null);
@@ -234,7 +258,7 @@ export const AppointmentModal: React.FC<AppointmentModalProps> = ({
     <Modal 
       isOpen={isOpen} 
       onClose={onClose} 
-      title={initialAppointment ? "Edit Appointment" : "New Appointment"}
+      title={initialAppointment ? t('editAppointment') : t('newAppointment')}
       maxWidth="4xl"
     >
       <form onSubmit={handleSubmit} className="flex flex-col lg:flex-row gap-6 lg:gap-8 p-1">
@@ -243,7 +267,7 @@ export const AppointmentModal: React.FC<AppointmentModalProps> = ({
             <section className="space-y-4">
                 <h3 className="text-xs font-bold text-surface-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
                     <User size={16} className="text-primary-600 dark:text-primary-400"/>
-                    Patient Details
+                    {t('patientDetails')}
                 </h3>
 
                 <div className="bg-surface-50 dark:bg-surface-800/50 p-4 rounded-xl border border-surface-200 dark:border-surface-700 min-h-[110px]">
@@ -254,7 +278,7 @@ export const AppointmentModal: React.FC<AppointmentModalProps> = ({
                                 <input
                                     type="text"
                                     className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-surface-300 dark:border-surface-600 text-surface-900 dark:text-surface-100 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white dark:bg-surface-900 shadow-sm transition-all"
-                                    placeholder="Search name or phone..."
+                                    placeholder={t('searchPlaceholder')}
                                     value={searchQuery}
                                     onChange={(e) => setSearchQuery(e.target.value)}
                                     autoFocus
@@ -272,7 +296,7 @@ export const AppointmentModal: React.FC<AppointmentModalProps> = ({
                                                 <div className="text-xs text-surface-500 dark:text-surface-400 flex items-center gap-1"><Phone size={12} /> {p.phone}</div>
                                             </button>
                                         )) : (
-                                            <div className="px-4 py-3 text-xs text-surface-400 text-center">No patients found.</div>
+                                            <div className="px-4 py-3 text-xs text-surface-400 text-center">{t('noPatientsFound')}</div>
                                         )}
                                     </div>
                                 )}
@@ -310,24 +334,24 @@ export const AppointmentModal: React.FC<AppointmentModalProps> = ({
             <section className="space-y-4">
                 <h3 className="text-xs font-bold text-surface-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
                     <Activity size={16} className={statusTheme[status].icon}/>
-                    Status & Notes
+                    {t('statusAndNotes')}
                 </h3>
                 
                 {status === 'completed' ? (
                     <div className="flex items-center gap-2 p-3 bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-xl text-purple-700 dark:text-purple-300">
                         <CheckCircle size={18} />
-                        <span className="font-bold text-sm">Appointment Completed</span>
-                        <span className="text-xs opacity-70 ml-auto">(Read Only)</span>
+                        <span className="font-bold text-sm">{t('appointmentCompleted')}</span>
+                        <span className="text-xs opacity-70 ml-auto">({t('readOnly')})</span>
                     </div>
                 ) : (
                     <div className="flex p-1 bg-surface-100 dark:bg-surface-800 rounded-xl overflow-x-auto">
-                        {/* Removed 'completed' from the list so user cannot select it manually */}
                         {(['confirmed', 'pending'] as const).map(s => (
                             <button
                                 key={s} type="button" onClick={() => setStatus(s)}
                                 className={cn("flex-1 py-2 px-3 text-sm font-medium rounded-lg capitalize transition-all duration-200 whitespace-nowrap", status === s ? statusTheme[s].active : statusTheme[s].inactive)}
                             >
-                                {s}
+                                {/* @ts-ignore */}
+                                {t(s)}
                             </button>
                         ))}
                     </div>
@@ -342,8 +366,8 @@ export const AppointmentModal: React.FC<AppointmentModalProps> = ({
                             statusTheme[status].focusRing
                         )}
                         value={observation} onChange={e => setObservation(e.target.value)}
-                        placeholder="Add clinical notes..."
-                        disabled={status === 'completed'} // Optional: lock notes if completed
+                        placeholder={t('notesPlaceholder')}
+                        disabled={status === 'completed'}
                     />
                 </div>
             </section>
@@ -356,7 +380,7 @@ export const AppointmentModal: React.FC<AppointmentModalProps> = ({
         <div className="flex-1 flex flex-col gap-4">
             <h3 className="text-xs font-bold text-surface-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
                 <CalendarIcon size={16} className="text-primary-600 dark:text-primary-400"/>
-                Date & Time
+                {t('dateTime')}
             </h3>
 
             <div className="relative mb-2">
@@ -372,10 +396,10 @@ export const AppointmentModal: React.FC<AppointmentModalProps> = ({
 
             <div className="flex-1 flex flex-col bg-surface-50 dark:bg-surface-800/50 rounded-xl border border-surface-200 dark:border-surface-700 overflow-hidden min-h-[350px]">
                 <div className="px-4 py-3 border-b border-surface-200 dark:border-surface-700 bg-white dark:bg-surface-800 flex items-center justify-between text-xs">
-                     <span className="font-medium text-surface-500 dark:text-surface-400 uppercase tracking-wide">Available Slots</span>
+                     <span className="font-medium text-surface-500 dark:text-surface-400 uppercase tracking-wide">{t('availableSlots')}</span>
                      <div className="flex gap-2">
-                        <span className="flex items-center gap-1 text-surface-600 dark:text-surface-400"><Lock size={10} /> Locked</span>
-                        <span className="flex items-center gap-1 text-surface-600 dark:text-surface-400"><CheckCircle size={10} /> Done</span>
+                        <span className="flex items-center gap-1 text-surface-600 dark:text-surface-400"><Lock size={10} /> {t('locked')}</span>
+                        <span className="flex items-center gap-1 text-surface-600 dark:text-surface-400"><CheckCircle size={10} /> {t('done')}</span>
                      </div>
                 </div>
                 
@@ -383,7 +407,7 @@ export const AppointmentModal: React.FC<AppointmentModalProps> = ({
                      {!selectedDate && (
                         <div className="absolute inset-0 flex flex-col items-center justify-center bg-white/60 dark:bg-surface-900/60 backdrop-blur-[1px] z-10 text-surface-400">
                             <CalendarIcon size={32} className="mb-2 opacity-50" />
-                            <span className="text-sm font-medium">Select a date first</span>
+                            <span className="text-sm font-medium">{t('selectDateFirst')}</span>
                         </div>
                     )}
 
@@ -402,7 +426,6 @@ export const AppointmentModal: React.FC<AppointmentModalProps> = ({
                             else if (isCompleted) baseClass = "bg-purple-50 dark:bg-purple-900/20 text-purple-400 dark:text-purple-600 border-purple-100 dark:border-purple-800 cursor-not-allowed";
                             else if (isPending) baseClass = "bg-white dark:bg-surface-900 text-surface-400 border-orange-200 dark:border-orange-900/50 border-dashed cursor-not-allowed";
 
-                            // Disable interaction if status is completed (locked)
                             const isLocked = status === 'completed';
 
                             return (
@@ -423,18 +446,18 @@ export const AppointmentModal: React.FC<AppointmentModalProps> = ({
                     </div>
                 </div>
                 <div className="p-3 bg-white dark:bg-surface-800 border-t border-surface-200 dark:border-surface-700 flex items-center justify-between text-xs text-surface-500 dark:text-surface-400">
-                    <div className="flex items-center gap-2"><Clock size={14} className="text-primary-500"/> <span>{selectedSlots.length > 0 ? `${selectedSlots.length} slots` : 'None'}</span></div>
-                    {selectedSlots.length > 0 && <span className="font-semibold text-surface-900 dark:text-white">{selectedSlots.length * 30} mins</span>}
+                    <div className="flex items-center gap-2"><Clock size={14} className="text-primary-500"/> <span>{selectedSlots.length > 0 ? `${selectedSlots.length} ${t('slotsCount')}` : 'None'}</span></div>
+                    {selectedSlots.length > 0 && <span className="font-semibold text-surface-900 dark:text-white">{selectedSlots.length * 30} {t('mins')}</span>}
                 </div>
             </div>
 
             <div className="flex justify-end gap-3 pt-2 items-center w-full mt-auto">
-                <Button type="button" variant="ghost" onClick={onClose}>Close</Button>
+                <Button type="button" variant="ghost" onClick={onClose}>{t('close')}</Button>
                 {initialAppointment && initialAppointment.status !== 'canceled' && status !== 'completed' && (
-                    <Button type="button" variant="danger" onClick={(e) => { e.preventDefault(); setShowCancelConfirm(true); }} className="gap-2"><Trash2 size={16} /> Cancel Booking</Button>
+                    <Button type="button" variant="danger" onClick={(e) => { e.preventDefault(); setShowCancelConfirm(true); }} className="gap-2"><Trash2 size={16} /> {t('cancelBooking')}</Button>
                 )}
                 {status !== 'completed' && (
-                    <Button type="submit" className="px-6 shadow-lg shadow-primary-200 dark:shadow-none">Save Appointment</Button>
+                    <Button type="submit" className="px-6 shadow-lg shadow-primary-200 dark:shadow-none">{t('saveAppointment')}</Button>
                 )}
             </div>
         </div>
@@ -443,26 +466,26 @@ export const AppointmentModal: React.FC<AppointmentModalProps> = ({
     
     <PatientDirectoryModal isOpen={isDirectoryOpen} onClose={() => setIsDirectoryOpen(false)} onSelect={(p) => { setSelectedPatient(p); setIsDirectoryOpen(false); setSearchQuery(''); }} />
 
-    <Modal isOpen={showCancelConfirm} onClose={() => setShowCancelConfirm(false)} title="Cancel Booking" maxWidth="sm">
+    <Modal isOpen={showCancelConfirm} onClose={() => setShowCancelConfirm(false)} title={t('cancelConfirmTitle')} maxWidth="sm">
         <div className="text-center p-2 dark:text-white">
             <div className="w-12 h-12 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center mx-auto mb-4 text-red-600 dark:text-red-400"><AlertTriangle size={24} /></div>
-            <h3 className="text-lg font-bold mb-2">Are you sure?</h3>
-            <p className="text-surface-500 dark:text-surface-400 mb-6">This appointment will be canceled.</p>
+            <h3 className="text-lg font-bold mb-2">{t('cancelConfirmTitle')}?</h3>
+            <p className="text-surface-500 dark:text-surface-400 mb-6">{t('cancelConfirmMessage')}</p>
             <div className="flex gap-3">
-                <Button variant="secondary" className="flex-1" onClick={() => setShowCancelConfirm(false)}>Keep it</Button>
-                <Button variant="danger" className="flex-1" onClick={() => { onSubmit({ ...initialAppointment, status: 'canceled' }); onClose(); }}>Yes, Cancel</Button>
+                <Button variant="secondary" className="flex-1" onClick={() => setShowCancelConfirm(false)}>{t('keepIt')}</Button>
+                <Button variant="danger" className="flex-1" onClick={() => { onSubmit({ ...initialAppointment, status: 'canceled' }); onClose(); }}>{t('confirmCancel')}</Button>
             </div>
         </div>
     </Modal>
 
-    <Modal isOpen={!!pendingConflictIds} onClose={() => setPendingConflictIds(null)} title="Slot Conflict" maxWidth="sm">
+    <Modal isOpen={!!pendingConflictIds} onClose={() => setPendingConflictIds(null)} title={t('overwriteTitle')} maxWidth="sm">
          <div className="text-center p-2 dark:text-white">
             <div className="w-12 h-12 bg-orange-100 dark:bg-orange-900/30 rounded-full flex items-center justify-center mx-auto mb-4 text-orange-600 dark:text-orange-400"><AlertTriangle size={24} /></div>
-            <h3 className="text-lg font-bold mb-2">Overwrite Pending Slots?</h3>
-            <p className="text-surface-500 dark:text-surface-400 mb-6">Your selection overlaps with existing pending appointments.</p>
+            <h3 className="text-lg font-bold mb-2">{t('overwriteTitle')}</h3>
+            <p className="text-surface-500 dark:text-surface-400 mb-6">{t('overwriteMessage')}</p>
             <div className="flex gap-3">
-                <Button variant="secondary" className="flex-1" onClick={() => setPendingConflictIds(null)}>Cancel</Button>
-                <Button className="flex-1" onClick={() => submitFinal(pendingConflictIds || [])}>Overwrite</Button>
+                <Button variant="secondary" className="flex-1" onClick={() => setPendingConflictIds(null)}>{t('cancel')}</Button>
+                <Button className="flex-1" onClick={() => submitFinal(pendingConflictIds || [])}>{t('overwrite')}</Button>
             </div>
         </div>
     </Modal>

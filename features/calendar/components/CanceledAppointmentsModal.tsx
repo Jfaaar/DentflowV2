@@ -1,10 +1,10 @@
-
 import React from 'react';
 import { Modal } from '../../../components/ui/Modal';
 import { Appointment } from '../../../types';
 import { Button } from '../../../components/ui/Button';
 import { formatDate, formatTime } from '../../../lib/utils';
 import { Undo2, Trash2, CalendarOff } from 'lucide-react';
+import { useLanguage } from '../../language/LanguageContext';
 
 interface CanceledAppointmentsModalProps {
   isOpen: boolean;
@@ -19,22 +19,22 @@ export const CanceledAppointmentsModal: React.FC<CanceledAppointmentsModalProps>
   canceledAppointments,
   onRestore
 }) => {
-  // Sort by most recently created/updated (using start date as proxy if createdAt not reliable)
+  const { t, language } = useLanguage();
   const sorted = [...canceledAppointments].sort((a, b) => new Date(b.start).getTime() - new Date(a.start).getTime());
 
   return (
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title="Canceled Bookings Log"
+      title={t('canceledLogTitle')}
       maxWidth="lg"
     >
       <div className="flex flex-col h-[60vh]">
         {sorted.length === 0 ? (
           <div className="flex-1 flex flex-col items-center justify-center text-surface-400">
             <CalendarOff size={48} className="mb-4 opacity-50" />
-            <p className="text-lg font-medium">No canceled appointments</p>
-            <p className="text-sm">Canceled bookings will appear here.</p>
+            <p className="text-lg font-medium">{t('noCanceledAppointments')}</p>
+            <p className="text-sm">{t('canceledLogDescription')}</p>
           </div>
         ) : (
           <div className="flex-1 overflow-y-auto custom-scrollbar space-y-3 p-1">
@@ -50,7 +50,7 @@ export const CanceledAppointmentsModal: React.FC<CanceledAppointmentsModalProps>
                     <div>
                         <h4 className="font-bold text-surface-900">{apt.patientName}</h4>
                         <div className="text-sm text-surface-600 mt-0.5">
-                            {formatDate(new Date(apt.start))} • {formatTime(apt.start)} - {formatTime(apt.end)}
+                            {formatDate(new Date(apt.start), language)} • {formatTime(apt.start)} - {formatTime(apt.end)}
                         </div>
                         {apt.observation && (
                             <p className="text-xs text-surface-500 italic mt-1 border-l-2 border-surface-300 pl-2">
@@ -67,7 +67,7 @@ export const CanceledAppointmentsModal: React.FC<CanceledAppointmentsModalProps>
                     onClick={() => onRestore(apt)}
                 >
                     <Undo2 size={16} />
-                    Restore
+                    {t('restore')}
                 </Button>
               </div>
             ))}
@@ -75,7 +75,7 @@ export const CanceledAppointmentsModal: React.FC<CanceledAppointmentsModalProps>
         )}
 
         <div className="mt-6 pt-4 border-t border-surface-100 flex justify-end">
-            <Button variant="ghost" onClick={onClose}>Close</Button>
+            <Button variant="ghost" onClick={onClose}>{t('close')}</Button>
         </div>
       </div>
     </Modal>

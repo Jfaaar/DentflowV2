@@ -4,8 +4,9 @@ import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
 import { api } from '../../lib/api';
 import { Patient } from '../../types';
-import { Search, Phone, Mail, UserCircle2, ArrowLeft, UserPlus, Loader2, MessageCircle, Globe } from 'lucide-react';
+import { Search, Phone, Mail, UserCircle2, ArrowLeft, UserPlus, Loader2, MessageCircle } from 'lucide-react';
 import { cn } from '../../lib/utils';
+import { useLanguage } from '../../features/language/LanguageContext';
 
 interface PatientDirectoryModalProps {
   isOpen: boolean;
@@ -15,6 +16,7 @@ interface PatientDirectoryModalProps {
 }
 
 export const PatientDirectoryModal: React.FC<PatientDirectoryModalProps> = ({ isOpen, onClose, onSelect, title }) => {
+  const { t } = useLanguage();
   const [patients, setPatients] = useState<Patient[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(true);
@@ -63,18 +65,16 @@ export const PatientDirectoryModal: React.FC<PatientDirectoryModalProps> = ({ is
         return;
     }
 
-    // Combine code and number
     const fullPhone = `${formData.countryCode.trim()} ${formData.phone.trim()}`;
 
     try {
         const newPatient = await api.patients.create({
-            id: '', // Backend assigns
+            id: '', 
             name: formData.name,
             phone: fullPhone,
             email: formData.email
         });
 
-        // Optimistic update
         setPatients(prev => [...prev, newPatient]);
         
         if (onSelect) {
@@ -89,9 +89,9 @@ export const PatientDirectoryModal: React.FC<PatientDirectoryModalProps> = ({ is
   };
 
   const getTitle = () => {
-    if (isCreating) return "New Patient";
+    if (isCreating) return t('newPatient');
     if (title) return title;
-    return onSelect ? "Select Patient" : "Patient Directory";
+    return onSelect ? t('selectPatient') : t('patientDirectory');
   };
 
   const openWhatsApp = (e: React.MouseEvent, phone: string) => {
@@ -100,18 +100,17 @@ export const PatientDirectoryModal: React.FC<PatientDirectoryModalProps> = ({ is
     window.open(`https://wa.me/${cleanPhone}`, '_blank');
   };
 
-  // Simple helper to get flag based on code
   const getCountryFlag = (code: string) => {
     const cleanCode = code.replace('+', '').trim();
     switch (cleanCode) {
-        case '212': return '🇲🇦'; // Morocco
-        case '33': return '🇫🇷';  // France
-        case '1': return '🇺🇸';   // USA
-        case '34': return '🇪🇸';  // Spain
-        case '39': return '🇮🇹';  // Italy
-        case '44': return '🇬🇧';  // UK
-        case '971': return '🇦🇪'; // UAE
-        case '966': return '🇸🇦'; // KSA
+        case '212': return '🇲🇦'; 
+        case '33': return '🇫🇷';  
+        case '1': return '🇺🇸';   
+        case '34': return '🇪🇸';  
+        case '39': return '🇮🇹';  
+        case '44': return '🇬🇧';  
+        case '971': return '🇦🇪'; 
+        case '966': return '🇸🇦'; 
         default: return '🌐';
     }
   };
@@ -133,7 +132,7 @@ export const PatientDirectoryModal: React.FC<PatientDirectoryModalProps> = ({ is
                         <input 
                             type="text"
                             className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-surface-300 dark:border-surface-600 text-surface-900 dark:text-surface-100 placeholder:text-surface-400 focus:outline-none focus:ring-2 focus:ring-primary-500 bg-surface-50/50 dark:bg-surface-800/50"
-                            placeholder="Search patients..."
+                            placeholder={t('searchPatientsPlaceholder')}
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
                             autoFocus
@@ -141,24 +140,24 @@ export const PatientDirectoryModal: React.FC<PatientDirectoryModalProps> = ({ is
                     </div>
                     <Button onClick={() => setIsCreating(true)} className="shrink-0 gap-2 shadow-md shadow-primary-200 dark:shadow-none">
                         <UserPlus size={18} />
-                        <span className="hidden sm:inline">Add Patient</span>
+                        <span className="hidden sm:inline">{t('addPatient')}</span>
                     </Button>
                 </div>
 
                 <div className="mb-2 px-1 text-xs font-medium text-surface-500 dark:text-surface-400 uppercase tracking-wide flex justify-between">
-                    <span>{filteredPatients.length} Found</span>
+                    <span>{filteredPatients.length} {t('found')}</span>
                 </div>
 
                 <div className="flex-1 overflow-y-auto custom-scrollbar space-y-2 p-1">
                 {isLoading ? (
                     <div className="h-full flex items-center justify-center text-surface-400 dark:text-surface-500">
-                        <Loader2 className="animate-spin mr-2"/> Loading...
+                        <Loader2 className="animate-spin mr-2"/> {t('loading')}
                     </div>
                 ) : filteredPatients.length === 0 ? (
                     <div className="flex flex-col items-center justify-center h-full text-surface-400 dark:text-surface-500">
                     <UserCircle2 size={48} className="mb-4 opacity-50" />
-                    <p className="text-lg font-medium">No patients found</p>
-                    <p className="text-sm">Search or add a new patient</p>
+                    <p className="text-lg font-medium">{t('noPatientsFound')}</p>
+                    <p className="text-sm">{t('searchOrAddPatient')}</p>
                     </div>
                 ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -215,14 +214,14 @@ export const PatientDirectoryModal: React.FC<PatientDirectoryModalProps> = ({ is
                             <UserPlus size={20} />
                         </div>
                         <div>
-                            <h4 className="text-sm font-bold text-blue-900 dark:text-blue-200">Creating New Patient</h4>
-                            <p className="text-xs text-blue-700 dark:text-blue-300 mt-1">Enter the patient's contact information below. They will be added to the directory immediately.</p>
+                            <h4 className="text-sm font-bold text-blue-900 dark:text-blue-200">{t('creatingPatientTitle')}</h4>
+                            <p className="text-xs text-blue-700 dark:text-blue-300 mt-1">{t('creatingPatientDesc')}</p>
                         </div>
                     </div>
 
                     <div className="space-y-5">
                         <Input 
-                            label="Full Name" 
+                            label={t('fullName')}
                             placeholder="e.g. Sarah Connor" 
                             value={formData.name}
                             onChange={e => setFormData({...formData, name: e.target.value})}
@@ -230,10 +229,9 @@ export const PatientDirectoryModal: React.FC<PatientDirectoryModalProps> = ({ is
                             autoFocus
                         />
                         
-                        {/* Phone Row with Country Code */}
                         <div className="space-y-1.5">
                             <label className="block text-xs font-semibold text-surface-700 dark:text-surface-300 uppercase tracking-wider">
-                                Phone Number
+                                {t('phoneNumber')}
                             </label>
                             <div className="flex gap-3 items-start">
                                 <div className="w-32 shrink-0 relative">
@@ -263,7 +261,7 @@ export const PatientDirectoryModal: React.FC<PatientDirectoryModalProps> = ({ is
                         </div>
 
                         <Input 
-                            label="Email Address (Optional)" 
+                            label={t('emailOptional')}
                             placeholder="e.g. sarah@example.com" 
                             type="email"
                             value={formData.email}
@@ -274,10 +272,10 @@ export const PatientDirectoryModal: React.FC<PatientDirectoryModalProps> = ({ is
 
                 <div className="flex justify-end gap-3 pt-4 border-t border-surface-100 dark:border-surface-700 mt-auto">
                     <Button type="button" variant="ghost" onClick={() => setIsCreating(false)}>
-                        <ArrowLeft size={16} className="mr-2" /> Back to list
+                        <ArrowLeft size={16} className="mr-2" /> {t('backToList')}
                     </Button>
                     <Button type="submit">
-                        Create Patient
+                        {t('createPatientButton')}
                     </Button>
                 </div>
             </form>

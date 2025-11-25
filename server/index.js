@@ -1,6 +1,5 @@
 const express = require('express');
 const cors = require('cors');
-const bodyParser = require('body-parser');
 const path = require('path');
 const { readData, writeData } = require('./db');
 
@@ -8,15 +7,15 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 
 app.use(cors());
-app.use(bodyParser.json());
+app.use(express.json()); // Native Express JSON parser
 
 // Helper to simulate network latency for realism
-const delay = (ms = 300) => new Promise(resolve => setTimeout(resolve, ms));
+const delay = (ms = 200) => new Promise(resolve => setTimeout(resolve, ms));
 
 // --- API Routes (Prefix with /api) ---
 
 app.post('/api/auth/login', async (req, res) => {
-  await delay(500);
+  await delay(300);
   const { email, password } = req.body;
   const db = readData();
   const user = db.users.find(u => u.email === email && u.password === password);
@@ -29,15 +28,18 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
+// --- PATIENTS ---
 app.get('/api/patients', async (req, res) => {
   await delay(200);
   const db = readData();
-  res.json(db.patients);
+  res.json(db.patients || []);
 });
 
 app.post('/api/patients', async (req, res) => {
   await delay(200);
   const db = readData();
+  if (!db.patients) db.patients = [];
+  
   const newPatient = { ...req.body, id: Math.random().toString(36).substr(2, 9) };
   db.patients.push(newPatient);
   writeData(db);
@@ -65,33 +67,40 @@ app.delete('/api/patients/:id', async (req, res) => {
   res.json({ success: true });
 });
 
+// --- APPOINTMENTS ---
 app.get('/api/appointments', async (req, res) => {
   await delay(200);
   const db = readData();
-  res.json(db.appointments);
+  res.json(db.appointments || []);
 });
 
 app.post('/api/appointments', async (req, res) => {
   await delay(200);
   const db = readData();
-  const { appointment, cancelIds } = req.body;
+  if (!db.appointments) db.appointments = [];
 
+  const { appointment, cancelIds } = req.body; 
+
+  // 1. Handle Cancels
   if (cancelIds && cancelIds.length > 0) {
     db.appointments = db.appointments.map(apt => 
       cancelIds.includes(apt.id) ? { ...apt, status: 'canceled' } : apt
     );
   }
 
+  // 2. Handle Create or Update
   if (appointment.id) {
     const index = db.appointments.findIndex(a => a.id === appointment.id);
     if (index !== -1) {
       db.appointments[index] = { ...db.appointments[index], ...appointment };
     }
   } else {
+    // Create
     const newApt = {
       ...appointment,
       id: Math.random().toString(36).substr(2, 9),
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
+      status: appointment.status || 'pending'
     };
     db.appointments.push(newApt);
   }
@@ -114,6 +123,45 @@ app.put('/api/appointments/:id/restore', async (req, res) => {
   }
 });
 
+// --- INVOICES ---
+app.get('/api/invoices', async (req, res) => {
+  await delay(200);
+  const db = readData();
+  res.json(db.invoices || []);
+});
+
+app.post('/api/invoices', async (req, res) => {
+  await delay(200);
+  const db = readData();
+  if (!db.invoices) db.invoices = [];
+  
+  const newInvoice = { ...req.body, id: Math.random().toString(36).substr(2, 9) };
+  db.invoices.push(newInvoice);
+  writeData(db);
+  res.json(newInvoice);
+});
+
+app.put('/api/invoices/:id', async (req, res) => {
+  await delay(200);
+  const db = readData();
+  if (!db.invoices) db.invoices = [];
+  
+  const index = db.invoices.findIndex(i => i.id === req.params.id);
+  if (index !== -1) {
+    db.invoices[index] = { ...db.invoices[index], ...req.body };
+    writeData(db);
+    res.json(db.invoices[index]);
+  } else {
+    res.status(404).json({ error: 'Invoice not found' });
+  }
+});
+
+// Global Error Handler
+app.use((err, req, res, next) => {
+    console.error("Server Error:", err);
+    res.status(500).json({ error: "Internal Server Error" });
+});
+
 // --- Production Static Serving ---
 if (process.env.NODE_ENV === 'production') {
   const buildPath = path.join(__dirname, '..', 'build');
@@ -121,7 +169,9 @@ if (process.env.NODE_ENV === 'production') {
 
   // Handle React Routing, return all requests to React app
   app.get('*', (req, res) => {
-    res.sendFile(path.join(buildPath, 'index.html'));
+    if (!req.path.startsWith('/api')) {
+        res.sendFile(path.join(buildPath, 'index.html'));
+    }
   });
 }
 

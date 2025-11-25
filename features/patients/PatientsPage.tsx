@@ -8,21 +8,20 @@ import { Search, UserPlus, Pencil, Trash2, Phone, Mail, FileText, Eye, Loader2, 
 import { PatientFormModal } from './components/PatientFormModal';
 import { PatientDetailsModal } from './components/PatientDetailsModal';
 import { AppointmentModal } from '../appointments/AppointmentModal';
+import { useLanguage } from '../language/LanguageContext';
 
 export const PatientsPage: React.FC = () => {
+  const { t } = useLanguage();
   const [patients, setPatients] = useState<Patient[]>([]);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   
-  // Modals
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingPatient, setEditingPatient] = useState<Patient | undefined>(undefined);
-  
   const [viewingPatient, setViewingPatient] = useState<Patient | null>(null);
 
-  // Appointment Modal State
   const [isAppointmentModalOpen, setIsAppointmentModalOpen] = useState(false);
   const [editingAppt, setEditingAppt] = useState<Appointment | undefined>(undefined);
 
@@ -65,7 +64,7 @@ export const PatientsPage: React.FC = () => {
         } else {
             await api.patients.create(patient);
         }
-        await refreshData(); // Reload list
+        await refreshData();
     } catch (e) {
         alert("Failed to save patient");
     } finally {
@@ -83,7 +82,6 @@ export const PatientsPage: React.FC = () => {
     }
   };
 
-  // Appointment Handlers
   const handleEditAppointment = (apt: Appointment) => {
     setEditingAppt(apt);
     setIsAppointmentModalOpen(true);
@@ -120,45 +118,43 @@ export const PatientsPage: React.FC = () => {
 
   return (
     <div className="flex flex-col h-full">
-      <Topbar title="Patients Directory">
-        {isLoading && <span className="text-xs text-surface-400 flex items-center"><Loader2 className="w-3 h-3 animate-spin mr-1"/> Updating...</span>}
+      <Topbar title={t('patientDirectory')}>
+        {isLoading && <span className="text-xs text-surface-400 flex items-center"><Loader2 className="w-3 h-3 animate-spin mr-1"/> {t('updating')}</span>}
       </Topbar>
 
       <div className="flex-1 p-4 md:p-6 overflow-hidden flex flex-col gap-4 md:gap-6">
-        {/* Actions Bar */}
         <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
           <div className="relative w-full sm:max-w-md">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-surface-400" size={18} />
             <input 
               type="text"
               className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-surface-300 dark:border-surface-700 text-surface-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white dark:bg-surface-800 shadow-sm transition-all"
-              placeholder="Search by name, phone, or email..."
+              placeholder={t('searchPatientsPlaceholder')}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
             />
           </div>
           <Button onClick={openNewPatient} className="gap-2 w-full sm:w-auto shadow-lg shadow-primary-200 dark:shadow-none">
             <UserPlus size={18} />
-            Add Patient
+            {t('addPatient')}
           </Button>
         </div>
 
-        {/* Data Table */}
         <Card className="flex-1 flex flex-col overflow-hidden border-surface-200 dark:border-surface-700 shadow-sm" noPadding>
           <div className="overflow-x-auto custom-scrollbar flex-1">
             <table className="w-full text-left border-collapse">
               <thead className="bg-surface-50 dark:bg-surface-800 sticky top-0 z-10 border-b border-surface-200 dark:border-surface-700">
                 <tr>
-                  <th className="py-4 px-4 md:px-6 text-xs font-semibold text-surface-500 dark:text-surface-400 uppercase tracking-wider">Name</th>
-                  <th className="py-4 px-4 md:px-6 text-xs font-semibold text-surface-500 dark:text-surface-400 uppercase tracking-wider hidden md:table-cell">Contact Info</th>
-                  <th className="py-4 px-4 md:px-6 text-xs font-semibold text-surface-500 dark:text-surface-400 uppercase tracking-wider text-right">Actions</th>
+                  <th className="py-4 px-4 md:px-6 text-xs font-semibold text-surface-500 dark:text-surface-400 uppercase tracking-wider">{t('fullName')}</th>
+                  <th className="py-4 px-4 md:px-6 text-xs font-semibold text-surface-500 dark:text-surface-400 uppercase tracking-wider hidden md:table-cell">{t('contactInfo')}</th>
+                  <th className="py-4 px-4 md:px-6 text-xs font-semibold text-surface-500 dark:text-surface-400 uppercase tracking-wider text-right">{t('actions')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-surface-100 dark:divide-surface-700">
                 {isLoading && filteredPatients.length === 0 ? (
                     <tr>
                         <td colSpan={3} className="py-12 text-center text-surface-400">
-                            <div className="flex items-center justify-center"><Loader2 className="animate-spin mr-2"/> Loading patients...</div>
+                            <div className="flex items-center justify-center"><Loader2 className="animate-spin mr-2"/> {t('loading')}</div>
                         </td>
                     </tr>
                 ) : filteredPatients.length > 0 ? (
@@ -177,7 +173,6 @@ export const PatientsPage: React.FC = () => {
                             <div className="font-semibold text-surface-900 dark:text-white group-hover:text-primary-700 dark:group-hover:text-primary-400 transition-colors truncate">
                               {patient.name}
                             </div>
-                            {/* Mobile Contact Info (shown when column hidden) */}
                             <div className="md:hidden text-xs text-surface-500 dark:text-surface-400 mt-1 flex items-center gap-2">
                                 <Phone size={12}/> {patient.phone}
                             </div>
@@ -244,8 +239,8 @@ export const PatientsPage: React.FC = () => {
                     <td colSpan={3} className="py-12 text-center text-surface-400">
                         <div className="flex flex-col items-center justify-center">
                             <FileText size={48} className="mb-4 opacity-20" />
-                            <p className="text-lg font-medium text-surface-500">No patients found</p>
-                            <p className="text-sm">Try adjusting your search or add a new patient.</p>
+                            <p className="text-lg font-medium text-surface-500">{t('noPatientsFound')}</p>
+                            <p className="text-sm">{t('searchOrAddPatient')}</p>
                         </div>
                     </td>
                   </tr>
@@ -254,8 +249,8 @@ export const PatientsPage: React.FC = () => {
             </table>
           </div>
           <div className="border-t border-surface-200 dark:border-surface-700 p-4 bg-surface-50 dark:bg-surface-800 text-xs text-surface-500 flex justify-between items-center">
-             <span>Showing {filteredPatients.length} records</span>
-             <span className="italic hidden sm:inline">Click a row to view full profile</span>
+             <span>{t('showingRecords').replace('{count}', filteredPatients.length.toString())}</span>
+             <span className="italic hidden sm:inline">{t('clickRowToView')}</span>
           </div>
         </Card>
       </div>

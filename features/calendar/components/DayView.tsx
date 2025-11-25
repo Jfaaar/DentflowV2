@@ -2,6 +2,7 @@ import React from 'react';
 import { Appointment } from '../../../types';
 import { cn } from '../../../lib/utils';
 import { isToday } from '../utils/dateUtils';
+import { useLanguage } from '../../language/LanguageContext';
 
 interface DayViewProps {
   date: Date;
@@ -11,6 +12,7 @@ interface DayViewProps {
 }
 
 export const DayView: React.FC<DayViewProps> = ({ date, appointments, onEditAppointment, onSlotClick }) => {
+  const { t, language } = useLanguage();
   const startHour = 8;
   const endHour = 18;
   const hours = Array.from({ length: endHour - startHour + 1 }, (_, i) => i + startHour);
@@ -21,7 +23,9 @@ export const DayView: React.FC<DayViewProps> = ({ date, appointments, onEditAppo
     const h = d.getHours();
     const m = d.getMinutes();
     if (h < startHour || h > endHour) return null;
-    const totalMinutes = (endHour - startHour) * 60;
+    
+    // Calculate percentage from top
+    const totalMinutes = (endHour - startHour + 1) * 60;
     const minutesFromStart = (h - startHour) * 60 + m;
     return (minutesFromStart / totalMinutes) * 100;
   };
@@ -30,7 +34,7 @@ export const DayView: React.FC<DayViewProps> = ({ date, appointments, onEditAppo
     const s = new Date(start);
     const e = new Date(end);
     const diffMins = (e.getTime() - s.getTime()) / 60000;
-    const totalMinutes = (endHour - startHour) * 60;
+    const totalMinutes = (endHour - startHour + 1) * 60;
     return (diffMins / totalMinutes) * 100;
   };
 
@@ -46,34 +50,46 @@ export const DayView: React.FC<DayViewProps> = ({ date, appointments, onEditAppo
             </div>
             <div className="flex flex-col">
                 <span className="text-xs font-semibold text-surface-500 uppercase tracking-wide">
-                    {date.toLocaleDateString('en-US', { weekday: 'long' })}
+                    {date.toLocaleDateString(language, { weekday: 'long' })}
                 </span>
-                <span className="text-xs text-surface-400">Daily Timeline</span>
+                <span className="text-xs text-surface-400">{t('dailyTimeline')}</span>
             </div>
         </div>
 
       <div className="flex-1 relative overflow-y-auto custom-scrollbar">
         <div className="absolute inset-0 flex flex-col min-h-[800px]">
           {hours.map(hour => (
-            <div key={hour} className="flex-1 border-b border-surface-100 flex min-h-[60px] group">
-              <div className="w-20 flex-shrink-0 border-r border-surface-100 text-xs font-medium text-surface-400 p-3 text-right bg-surface-50/30">
+            <div key={hour} className="flex-1 border-b border-surface-300 flex min-h-[60px] group relative">
+              {/* Hour Label */}
+              <div className="w-20 flex-shrink-0 border-r border-surface-200 text-xs font-bold text-surface-600 p-3 text-right bg-surface-50/50">
                 {hour}:00
               </div>
-              <div 
-                className="flex-1 cursor-pointer hover:bg-primary-50/20 transition-colors relative"
-                onClick={() => {
-                   const d = new Date(date);
-                   d.setHours(hour, 0, 0, 0);
-                   onSlotClick(d.toISOString());
-                }}
-              >
-                {/* Hover Plus Icon hint could go here */}
+              
+              <div className="flex-1 relative">
+                <div className="absolute top-1/2 left-0 right-0 border-t border-dashed border-surface-200 pointer-events-none" />
+
+                <div 
+                    className="absolute top-0 left-0 right-0 h-1/2 cursor-pointer hover:bg-primary-50/30 dark:hover:bg-primary-900/20 transition-colors z-10"
+                    onClick={() => {
+                        const d = new Date(date);
+                        d.setHours(hour, 0, 0, 0);
+                        onSlotClick(d.toISOString());
+                    }}
+                />
+
+                <div 
+                    className="absolute bottom-0 left-0 right-0 h-1/2 cursor-pointer hover:bg-primary-50/30 dark:hover:bg-primary-900/20 transition-colors z-10"
+                    onClick={() => {
+                        const d = new Date(date);
+                        d.setHours(hour, 30, 0, 0);
+                        onSlotClick(d.toISOString());
+                    }}
+                />
               </div>
             </div>
           ))}
         </div>
 
-        {/* Appointments Overlay */}
         <div className="absolute inset-0 ml-20 pointer-events-none min-h-[800px]">
             {appointments.map(apt => {
                 const top = getPosition(apt.start);
@@ -96,7 +112,7 @@ export const DayView: React.FC<DayViewProps> = ({ date, appointments, onEditAppo
                         }}
                         style={{ top: `${top}%`, height: `${height}%` }}
                         className={cn(
-                            "absolute inset-x-4 my-0.5 rounded-r-lg border border-surface-200 p-3 cursor-pointer pointer-events-auto transition-all hover:shadow-md hover:z-10 flex flex-col justify-center",
+                            "absolute inset-x-4 my-0.5 rounded-r-lg border border-surface-200 p-3 cursor-pointer pointer-events-auto transition-all hover:shadow-md z-20 hover:z-30 flex flex-col justify-center",
                             statusStyles[apt.status]
                         )}
                     >
@@ -111,8 +127,8 @@ export const DayView: React.FC<DayViewProps> = ({ date, appointments, onEditAppo
                         </div>
                         <div className="text-xs text-surface-500 flex items-center gap-2 mt-0.5">
                              <span>
-                                {new Date(apt.start).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} - 
-                                {new Date(apt.end).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                                {new Date(apt.start).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', hour12: false})} - 
+                                {new Date(apt.end).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', hour12: false})}
                              </span>
                              {apt.observation && <span className="truncate max-w-[150px] italic opacity-75">- {apt.observation}</span>}
                         </div>
