@@ -3,6 +3,7 @@ import { Appointment } from '../../../types';
 import { cn } from '../../../lib/utils';
 import { isToday } from '../utils/dateUtils';
 import { useLanguage } from '../../language/LanguageContext';
+import { Plus } from 'lucide-react';
 
 interface DayViewProps {
   date: Date;
@@ -39,52 +40,59 @@ export const DayView: React.FC<DayViewProps> = ({ date, appointments, onEditAppo
   };
 
   return (
-    <div className="flex flex-col h-full bg-white rounded-2xl border border-surface-200 shadow-sm overflow-hidden animate-in fade-in duration-300">
+    <div className="flex flex-col h-full bg-white dark:bg-surface-900 rounded-2xl border border-surface-200 dark:border-surface-800 shadow-sm overflow-hidden animate-in fade-in duration-300">
         {/* Header */}
-        <div className="py-4 px-6 border-b border-surface-200 bg-surface-50 flex items-center gap-3">
+        <div className="py-4 px-6 border-b border-surface-200 dark:border-surface-800 bg-surface-50 dark:bg-surface-800 flex items-center gap-3">
             <div className={cn(
                 "text-2xl font-bold",
-                isCurrentDay ? "text-primary-600" : "text-surface-900"
+                isCurrentDay ? "text-primary-600 dark:text-primary-400" : "text-surface-900 dark:text-white"
             )}>
                 {date.getDate()}
             </div>
             <div className="flex flex-col">
-                <span className="text-xs font-semibold text-surface-500 uppercase tracking-wide">
+                <span className="text-xs font-semibold text-surface-500 dark:text-surface-400 uppercase tracking-wide">
                     {date.toLocaleDateString(language, { weekday: 'long' })}
                 </span>
-                <span className="text-xs text-surface-400">{t('dailyTimeline')}</span>
+                <span className="text-xs text-surface-400 dark:text-surface-500">{t('dailyTimeline')}</span>
             </div>
         </div>
 
-      <div className="flex-1 relative overflow-y-auto custom-scrollbar">
+      <div className="flex-1 relative overflow-y-auto custom-scrollbar bg-white dark:bg-surface-900">
         <div className="absolute inset-0 flex flex-col min-h-[800px]">
           {hours.map(hour => (
-            <div key={hour} className="flex-1 border-b border-surface-300 flex min-h-[60px] group relative">
+            <div key={hour} className="flex-1 border-b border-surface-200 dark:border-surface-800 flex min-h-[60px] group relative">
               {/* Hour Label */}
-              <div className="w-20 flex-shrink-0 border-r border-surface-200 text-xs font-bold text-surface-600 p-3 text-right bg-surface-50/50">
+              <div className="w-20 flex-shrink-0 border-r border-surface-200 dark:border-surface-800 text-xs font-bold text-surface-500 dark:text-surface-400 p-3 text-right bg-surface-50/50 dark:bg-surface-800/50">
                 {hour}:00
               </div>
               
               <div className="flex-1 relative">
-                <div className="absolute top-1/2 left-0 right-0 border-t border-dashed border-surface-200 pointer-events-none" />
+                {/* 30 min mark line */}
+                <div className="absolute top-1/2 left-0 right-0 border-t border-dashed border-surface-200 dark:border-surface-700 pointer-events-none" />
 
+                {/* Top Half (00-30) */}
                 <div 
-                    className="absolute top-0 left-0 right-0 h-1/2 cursor-pointer hover:bg-primary-50/30 dark:hover:bg-primary-900/20 transition-colors z-10"
+                    className="absolute top-0 left-0 right-0 h-1/2 cursor-pointer hover:bg-primary-100 dark:hover:bg-primary-900/40 transition-colors z-10 flex items-center justify-center group/slot"
                     onClick={() => {
                         const d = new Date(date);
                         d.setHours(hour, 0, 0, 0);
                         onSlotClick(d.toISOString());
                     }}
-                />
+                >
+                    <Plus className="w-4 h-4 text-primary-500 dark:text-primary-400 opacity-0 group-hover/slot:opacity-100 transition-all duration-200 scale-75 group-hover/slot:scale-100" />
+                </div>
 
+                {/* Bottom Half (30-00) */}
                 <div 
-                    className="absolute bottom-0 left-0 right-0 h-1/2 cursor-pointer hover:bg-primary-50/30 dark:hover:bg-primary-900/20 transition-colors z-10"
+                    className="absolute bottom-0 left-0 right-0 h-1/2 cursor-pointer hover:bg-primary-100 dark:hover:bg-primary-900/40 transition-colors z-10 flex items-center justify-center group/slot"
                     onClick={() => {
                         const d = new Date(date);
                         d.setHours(hour, 30, 0, 0);
                         onSlotClick(d.toISOString());
                     }}
-                />
+                >
+                    <Plus className="w-4 h-4 text-primary-500 dark:text-primary-400 opacity-0 group-hover/slot:opacity-100 transition-all duration-200 scale-75 group-hover/slot:scale-100" />
+                </div>
               </div>
             </div>
           ))}
@@ -97,10 +105,10 @@ export const DayView: React.FC<DayViewProps> = ({ date, appointments, onEditAppo
                 if (top === null) return null;
 
                 const statusStyles = {
-                    confirmed: 'bg-white border-l-4 border-green-500 shadow-sm',
-                    pending: 'bg-white border-l-4 border-orange-500 shadow-sm',
-                    completed: 'bg-white border-l-4 border-purple-500 shadow-sm opacity-80',
-                    canceled: 'bg-surface-50 border-l-4 border-surface-300 opacity-60'
+                    confirmed: 'bg-white dark:bg-surface-800 border-l-4 border-green-500 shadow-sm',
+                    pending: 'bg-white dark:bg-surface-800 border-l-4 border-orange-500 shadow-sm',
+                    completed: 'bg-white dark:bg-surface-800 border-l-4 border-purple-500 shadow-sm opacity-80',
+                    canceled: 'bg-surface-50 dark:bg-surface-800 border-l-4 border-surface-300 dark:border-surface-600 opacity-60'
                 };
 
                 return (
@@ -112,12 +120,12 @@ export const DayView: React.FC<DayViewProps> = ({ date, appointments, onEditAppo
                         }}
                         style={{ top: `${top}%`, height: `${height}%` }}
                         className={cn(
-                            "absolute inset-x-4 my-0.5 rounded-r-lg border border-surface-200 p-3 cursor-pointer pointer-events-auto transition-all hover:shadow-md z-20 hover:z-30 flex flex-col justify-center",
+                            "absolute inset-x-4 my-0.5 rounded-r-lg border border-surface-200 dark:border-surface-700 p-3 cursor-pointer pointer-events-auto transition-all hover:shadow-md z-20 hover:z-30 flex flex-col justify-center",
                             statusStyles[apt.status]
                         )}
                     >
                         <div className="flex justify-between items-center">
-                             <span className="font-bold text-surface-900 text-sm">{apt.patientName}</span>
+                             <span className="font-bold text-surface-900 dark:text-white text-sm">{apt.patientName}</span>
                              <div className={cn(
                                 "w-2 h-2 rounded-full",
                                 apt.status === 'confirmed' ? 'bg-green-500' : 
@@ -125,7 +133,7 @@ export const DayView: React.FC<DayViewProps> = ({ date, appointments, onEditAppo
                                 apt.status === 'completed' ? 'bg-purple-500' : 'bg-surface-400'
                              )} />
                         </div>
-                        <div className="text-xs text-surface-500 flex items-center gap-2 mt-0.5">
+                        <div className="text-xs text-surface-500 dark:text-surface-400 flex items-center gap-2 mt-0.5">
                              <span>
                                 {new Date(apt.start).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', hour12: false})} - 
                                 {new Date(apt.end).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', hour12: false})}
