@@ -1,4 +1,4 @@
-import { Appointment, User, Patient, Invoice, Radio } from "../types";
+import { Appointment, User, Patient, Invoice } from "../types";
 
 const KEYS = {
   USER: 'dentflow_user',
@@ -6,7 +6,6 @@ const KEYS = {
   PATIENTS: 'dentflow_patients',
   LANGUAGE: 'dentflow_language',
   INVOICES: 'dentflow_invoices',
-  RADIOS: 'dentflow_radios',
 };
 
 export const storage = {
@@ -108,31 +107,6 @@ export const storage = {
     const current = storage.getInvoices();
     const updated = current.map(i => i.id === invoice.id ? invoice : i);
     localStorage.setItem(KEYS.INVOICES, JSON.stringify(updated));
-    return updated;
-  },
-
-  // Radio Methods
-  getRadios: (): Radio[] => {
-    try {
-      const data = localStorage.getItem(KEYS.RADIOS);
-      return data ? JSON.parse(data) : [];
-    } catch (e) { return []; }
-  },
-  addRadio: (radio: Radio) => {
-    const current = storage.getRadios();
-    const updated = [radio, ...current];
-    try {
-        localStorage.setItem(KEYS.RADIOS, JSON.stringify(updated));
-    } catch (e) {
-        console.error("LocalStorage quota exceeded", e);
-        throw new Error("Storage full");
-    }
-    return updated;
-  },
-  deleteRadio: (id: string) => {
-    const current = storage.getRadios();
-    const updated = current.filter(r => r.id !== id);
-    localStorage.setItem(KEYS.RADIOS, JSON.stringify(updated));
     return updated;
   }
 };
