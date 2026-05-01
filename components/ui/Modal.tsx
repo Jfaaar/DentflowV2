@@ -9,9 +9,19 @@ interface ModalProps {
   title: string;
   children: React.ReactNode;
   maxWidth?: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | '3xl' | '4xl' | '5xl';
+  className?: string;
+  closeOnOutsideClick?: boolean;
 }
 
-export const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children, maxWidth = 'md' }) => {
+export const Modal: React.FC<ModalProps> = ({ 
+  isOpen, 
+  onClose, 
+  title, 
+  children, 
+  maxWidth = 'md', 
+  className,
+  closeOnOutsideClick = true 
+}) => {
   const modalRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -28,6 +38,12 @@ export const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children, 
     };
   }, [isOpen, onClose]);
 
+  const handleBackdropClick = (e: React.MouseEvent) => {
+    if (closeOnOutsideClick && e.target === e.currentTarget) {
+      onClose();
+    }
+  };
+
   if (!isOpen) return null;
 
   const sizeClasses = {
@@ -42,7 +58,10 @@ export const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children, 
   };
 
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-surface-900/50 dark:bg-black/70 backdrop-blur-sm animate-fade-in">
+    <div 
+      className={cn("fixed inset-0 z-50 flex items-center justify-center p-4 bg-surface-900/50 dark:bg-black/70 backdrop-blur-sm animate-fade-in", className)}
+      onClick={handleBackdropClick}
+    >
       <div
         ref={modalRef}
         className={cn(

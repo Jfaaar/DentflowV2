@@ -40,6 +40,8 @@ export const AppointmentModal: React.FC<AppointmentModalProps> = ({
   const [observation, setObservation] = useState('');
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [pendingConflictIds, setPendingConflictIds] = useState<string[] | null>(null);
+  const [showOverwriteConfirm, setShowOverwriteConfirm] = useState(false);
+  const [validationError, setValidationError] = useState<string | null>(null);
 
   const timeSlots = useMemo(() => {
     const slots: string[] = [];
@@ -50,25 +52,34 @@ export const AppointmentModal: React.FC<AppointmentModalProps> = ({
     return slots;
   }, []);
 
-  // 1. Fetch Patients (Independent Effect)
   useEffect(() => {
     if (isOpen) {
       api.patients.list().then(setPatients);
     }
   }, [isOpen]);
 
-  // 2. Initialize Form Data (Date, Time, Status) - Decoupled from Patients
+  // Initialization Logic
   useEffect(() => {
     if (isOpen) {
+      setValidationError(null); // Clear errors on open
       if (initialAppointment) {
         // --- Edit Mode ---
+        if (patients.length > 0) {
+            const foundPatient = patients.find(p => p.id === initialAppointment.patientId);
+            if (foundPatient) setSelectedPatient(foundPatient);
+            else if (initialAppointment.patientName) {
+                 setSelectedPatient({ id: initialAppointment.patientId, name: initialAppointment.patientName, phone: 'Unknown' });
+            }
+        } else if (initialAppointment.patientName) {
+            setSelectedPatient({ id: initialAppointment.patientId, name: initialAppointment.patientName, phone: 'Loading...' });
+        }
+
         setStatus(initialAppointment.status);
         setObservation(initialAppointment.observation || '');
         
         const startObj = new Date(initialAppointment.start);
         const endObj = new Date(initialAppointment.end);
         
-        // Handle timezone for date input
         const offset = startObj.getTimezoneOffset();
         const localDate = new Date(startObj.getTime() - (offset * 60 * 1000));
         setSelectedDate(localDate.toISOString().split('T')[0]);
@@ -84,39 +95,34 @@ export const AppointmentModal: React.FC<AppointmentModalProps> = ({
 
       } else {
         // --- New Appointment Mode ---
-        resetForm();
-        
-        if (initialDate) {
-            // Handle timezone for date input
-            const offset = initialDate.getTimezoneOffset(); 
-            const localDate = new Date(initialDate.getTime() - (offset * 60 * 1000));
-            setSelectedDate(localDate.toISOString().split('T')[0]);
-            
-            // Auto-select slot from Day View click
-            const h = initialDate.getHours();
-            const m = initialDate.getMinutes();
-            if (h >= START_HOUR && h < END_HOUR) {
-                const timeStr = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
-                // Only auto-select if it matches our grid intervals (00 or 30)
-                if (m === 0 || m === 30) {
-                    setSelectedSlots([timeStr]);
-                }
-            }
+        // Reset form first
+        if (!selectedDate && !initialDate) {
+             resetForm();
         }
       }
     }
-  }, [isOpen, initialAppointment, initialDate]);
+  }, [isOpen, initialAppointment, patients]);
 
-  // 3. Match Patient for Edit Mode (Dependent on Patients)
+  // Strict Date Initialization Effect
   useEffect(() => {
-    if (isOpen && initialAppointment && patients.length > 0) {
-        const foundPatient = patients.find(p => p.id === initialAppointment.patientId);
-        if (foundPatient) setSelectedPatient(foundPatient);
-        else if (initialAppointment.patientName) {
-             setSelectedPatient({ id: initialAppointment.patientId, name: initialAppointment.patientName, phone: 'Unknown' });
+    if (isOpen && !initialAppointment && initialDate) {
+        resetForm();
+        
+        const offset = initialDate.getTimezoneOffset(); 
+        const localDate = new Date(initialDate.getTime() - (offset*60*1000));
+        setSelectedDate(localDate.toISOString().split('T')[0]);
+        
+        const h = initialDate.getHours();
+        const m = initialDate.getMinutes();
+        if (h >= START_HOUR && h < END_HOUR) {
+            const timeStr = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+            // Adjust to nearest 30 min slot
+            const slotMin = m < 30 ? '00' : '30';
+            const adjustedTimeStr = `${h.toString().padStart(2, '0')}:${slotMin}`;
+            setSelectedSlots([adjustedTimeStr]);
         }
     }
-  }, [isOpen, initialAppointment, patients]);
+  }, [isOpen, initialDate, initialAppointment]);
 
   const resetForm = () => {
     setSelectedPatient(null);
@@ -124,8 +130,11 @@ export const AppointmentModal: React.FC<AppointmentModalProps> = ({
     setStatus('pending');
     setObservation('');
     setSelectedSlots([]);
+    setSelectedDate('');
     setShowCancelConfirm(false);
     setPendingConflictIds(null);
+    setShowOverwriteConfirm(false);
+    setValidationError(null);
   };
 
   const filteredPatients = useMemo(() => {
@@ -152,343 +161,470 @@ export const AppointmentModal: React.FC<AppointmentModalProps> = ({
   };
 
   const toggleSlot = (slot: string) => {
+    setValidationError(null);
     const { status: slotStatus } = checkSlotStatus(selectedDate, slot);
     if (slotStatus === 'confirmed' || slotStatus === 'completed') return;
+    
+    // Logic: If clicking an already selected slot, clear everything to start over
     if (selectedSlots.includes(slot)) {
-      setSelectedSlots([]);
-      return;
+        setSelectedSlots([]);
+        return;
     }
 
+    // Logic: Range Selection
     if (selectedSlots.length > 0) {
-      const allSlots = timeSlots; 
-      const sortedCurrent = [...selectedSlots].sort();
-      const startSlot = sortedCurrent[0];
-      const endSlot = sortedCurrent[sortedCurrent.length - 1];
-      const clickedIndex = allSlots.indexOf(slot);
-      const startIndex = allSlots.indexOf(startSlot);
-      const endIndex = allSlots.indexOf(endSlot);
-      const rangeStartIdx = Math.min(clickedIndex, startIndex);
-      const rangeEndIdx = Math.max(clickedIndex, endIndex);
-      const candidateRange = allSlots.slice(rangeStartIdx, rangeEndIdx + 1);
+        const sorted = [...selectedSlots, slot].sort();
+        const startIdx = timeSlots.indexOf(sorted[0]);
+        const endIdx = timeSlots.indexOf(sorted[sorted.length - 1]);
+        
+        // Generate range
+        const candidateRange = timeSlots.slice(startIdx, endIdx + 1);
+        
+        // Check if any confirmed slots are in the way
+        const hasConfirmedConflict = candidateRange.some(s => {
+            const st = checkSlotStatus(selectedDate, s);
+            return st.status === 'confirmed' || st.status === 'completed';
+        });
 
-      const hasConfirmedConflict = candidateRange.some(s => {
-        const { status } = checkSlotStatus(selectedDate, s);
-        return status === 'confirmed' || status === 'completed';
-      });
-
-      if (hasConfirmedConflict) {
-        alert("Cannot select a range that overlaps with Confirmed or Completed appointments.");
-        return;
-      }
-      setSelectedSlots(candidateRange);
+        if (!hasConfirmedConflict) {
+            setSelectedSlots(candidateRange);
+        }
     } else {
-      setSelectedSlots([slot]);
+        setSelectedSlots([slot]);
     }
   };
 
+  const handleSelectPatient = (patient: Patient) => {
+    setSelectedPatient(patient);
+    setSearchQuery('');
+    setIsDirectoryOpen(false);
+    setValidationError(null);
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setValidationError(null);
+
+    if (!selectedDate || selectedSlots.length === 0) {
+        setValidationError(t('selectDateFirst'));
+        return;
+    }
+    if (!selectedPatient) {
+        setValidationError(t('selectPatient'));
+        return;
+    }
+
+    const sortedSlots = [...selectedSlots].sort();
+    const startTime = sortedSlots[0];
+    const endTime = sortedSlots[sortedSlots.length - 1];
+    
+    const start = new Date(`${selectedDate}T${startTime}`);
+    const end = new Date(`${selectedDate}T${endTime}`);
+    end.setMinutes(end.getMinutes() + 30); // Add 30 mins to last slot
+
+    // Check for pending conflicts in the range
+    const conflicts: string[] = [];
+    sortedSlots.forEach(slot => {
+        const check = checkSlotStatus(selectedDate, slot);
+        if (check.status === 'pending' && check.appointment) {
+             if (!conflicts.includes(check.appointment.id)) {
+                 conflicts.push(check.appointment.id);
+             }
+        }
+    });
+
+    if (conflicts.length > 0) {
+        setPendingConflictIds(conflicts);
+        setShowOverwriteConfirm(true);
+        return;
+    }
+
+    submitData(start, end);
+  };
+
+  const submitData = (start: Date, end: Date, cancelIds: string[] = []) => {
+    if (!selectedPatient) return;
+
+    const appointmentData: Partial<Appointment> = {
+      id: initialAppointment?.id,
+      patientId: selectedPatient.id,
+      patientName: selectedPatient.name,
+      start: start.toISOString(),
+      end: end.toISOString(),
+      status,
+      observation
+    };
+    onSubmit(appointmentData, cancelIds);
+    onClose();
+  };
+
+  const confirmOverwrite = () => {
+    if (!selectedDate || selectedSlots.length === 0 || !selectedPatient) return;
+    const sortedSlots = [...selectedSlots].sort();
+    const startTime = sortedSlots[0];
+    const endTime = sortedSlots[sortedSlots.length - 1];
+    const start = new Date(`${selectedDate}T${startTime}`);
+    const end = new Date(`${selectedDate}T${endTime}`);
+    end.setMinutes(end.getMinutes() + 30);
+
+    submitData(start, end, pendingConflictIds || []);
+    setShowOverwriteConfirm(false);
+  };
+
+  const handleCancelBooking = (e: React.MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setShowCancelConfirm(true);
+  };
+
+  const confirmCancelBooking = () => {
+      if (initialAppointment) {
+          onSubmit({ id: initialAppointment.id, status: 'canceled' });
+          onClose();
+      }
+      setShowCancelConfirm(false);
+  };
+
   const openWhatsApp = (e: React.MouseEvent, phone: string) => {
+    e.preventDefault();
     e.stopPropagation();
     const cleanPhone = phone.replace(/[^0-9]/g, '');
     window.open(`https://wa.me/${cleanPhone}`, '_blank');
   };
 
-  const statusTheme = {
-    confirmed: {
-      active: 'bg-green-100 text-green-800 ring-1 ring-green-500 shadow-sm dark:bg-green-900/40 dark:text-green-300 dark:ring-green-500/50',
-      inactive: 'text-green-600 hover:bg-green-50 hover:text-green-800 dark:text-green-400 dark:hover:bg-green-900/20',
-      icon: 'text-green-600 dark:text-green-400',
-      focusRing: 'focus:ring-green-500 focus:border-green-500'
-    },
-    pending: {
-      active: 'bg-orange-100 text-orange-800 ring-1 ring-orange-500 shadow-sm dark:bg-orange-900/40 dark:text-orange-300 dark:ring-orange-500/50',
-      inactive: 'text-orange-600 hover:bg-orange-50 hover:text-orange-800 dark:text-orange-400 dark:hover:bg-orange-900/20',
-      icon: 'text-orange-600 dark:text-orange-400',
-      focusRing: 'focus:ring-orange-500 focus:border-orange-500'
-    },
-    completed: {
-      active: 'bg-purple-100 text-purple-800 ring-1 ring-purple-500 shadow-sm dark:bg-purple-900/40 dark:text-purple-300 dark:ring-purple-500/50',
-      inactive: 'text-purple-600 hover:bg-purple-50 hover:text-purple-800 dark:text-purple-400 dark:hover:bg-purple-900/20',
-      icon: 'text-purple-600 dark:text-purple-400',
-      focusRing: 'focus:ring-purple-500 focus:border-purple-500'
-    },
-    canceled: { active: '', inactive: '', icon: '', focusRing: '' }
+  const getStatusColor = (s: AppointmentStatus) => {
+      switch(s) {
+          case 'confirmed': return 'bg-green-100 text-green-700 border-green-200';
+          case 'pending': return 'bg-orange-100 text-orange-700 border-orange-200';
+          case 'canceled': return 'bg-red-100 text-red-700 border-red-200';
+          case 'completed': return 'bg-purple-100 text-purple-700 border-purple-200';
+          default: return 'bg-surface-100 text-surface-700 border-surface-200';
+      }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (selectedSlots.length === 0 || !selectedPatient) {
-        alert("Please select slots and a patient.");
-        return;
+  const statusTheme = useMemo(() => {
+    switch (status) {
+        case 'confirmed': return { bg: 'bg-green-50 dark:bg-green-900/10', border: 'border-green-200 dark:border-green-800', text: 'text-green-700 dark:text-green-400', ring: 'focus:ring-green-500' };
+        case 'pending': return { bg: 'bg-orange-50 dark:bg-orange-900/10', border: 'border-orange-200 dark:border-orange-800', text: 'text-orange-700 dark:text-orange-400', ring: 'focus:ring-orange-500' };
+        default: return { bg: 'bg-surface-50 dark:bg-surface-800', border: 'border-surface-200 dark:border-surface-700', text: 'text-surface-700 dark:text-surface-300', ring: 'focus:ring-primary-500' };
     }
+  }, [status]);
 
-    const touchedPendingApps = new Set<string>();
-    for (const slot of selectedSlots) {
-        const { status, appointment } = checkSlotStatus(selectedDate, slot);
-        if (status === 'pending' && appointment) touchedPendingApps.add(appointment.id);
-    }
+  // Read-only mode for completed appointments
+  const isReadOnly = initialAppointment?.status === 'completed';
 
-    if (touchedPendingApps.size > 0) {
-        setPendingConflictIds(Array.from(touchedPendingApps));
-        return;
-    }
-    submitFinal([]);
-  };
-
-  const submitFinal = (conflictingIds: string[] = []) => {
-    const sortedSlots = [...selectedSlots].sort();
-    const startDateTime = new Date(`${selectedDate}T${sortedSlots[0]}`);
-    const endDateTime = new Date(`${selectedDate}T${sortedSlots[sortedSlots.length - 1]}`);
-    endDateTime.setMinutes(endDateTime.getMinutes() + 30);
-
-    if (!selectedPatient) return;
-    onSubmit({
-        id: initialAppointment?.id,
-        patientId: selectedPatient.id,
-        patientName: selectedPatient.name,
-        start: startDateTime.toISOString(),
-        end: endDateTime.toISOString(),
-        status,
-        observation
-    }, conflictingIds);
-    onClose();
-  };
+  // Time Range Display Calculation
+  const timeRangeDisplay = useMemo(() => {
+    if (selectedSlots.length === 0) return null;
+    const sorted = [...selectedSlots].sort();
+    const startStr = sorted[0];
+    const endStr = sorted[sorted.length - 1];
+    
+    // Calculate end time (add 30 mins to last slot)
+    const [h, m] = endStr.split(':').map(Number);
+    const endDate = new Date();
+    endDate.setHours(h, m + 30);
+    const formattedEnd = endDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+    
+    return `${startStr} - ${formattedEnd}`;
+  }, [selectedSlots]);
 
   return (
-    <>
-    <Modal 
-      isOpen={isOpen} 
-      onClose={onClose} 
-      title={initialAppointment ? t('editAppointment') : t('newAppointment')}
-      maxWidth="4xl"
-    >
-      <form onSubmit={handleSubmit} className="flex flex-col lg:flex-row gap-6 lg:gap-8 p-1">
-        {/* Left Column */}
+    <Modal isOpen={isOpen} onClose={onClose} title={initialAppointment ? t('editAppointment') : t('newAppointment')} maxWidth="4xl">
+      <form onSubmit={handleSubmit} className="flex flex-col md:flex-row gap-6 h-[80vh] md:h-auto overflow-y-auto md:overflow-visible p-1">
+        
+        {/* Left Column: Patient & Details */}
         <div className="flex-1 flex flex-col gap-6">
-            <section className="space-y-4">
-                <h3 className="text-xs font-bold text-surface-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
-                    <User size={16} className="text-primary-600 dark:text-primary-400"/>
-                    {t('patientDetails')}
-                </h3>
+            
+            {/* Section: Patient */}
+            <div className="flex flex-col gap-3">
+                <div className="flex items-center gap-2 text-surface-900 dark:text-white font-semibold border-b border-surface-100 dark:border-surface-700 pb-2">
+                    <User size={18} className="text-primary-500" />
+                    <h3>{t('patientDetails')}</h3>
+                </div>
 
-                <div className="bg-surface-50 dark:bg-surface-800/50 p-4 rounded-xl border border-surface-200 dark:border-surface-700 min-h-[110px]">
+                <div className="bg-surface-50 dark:bg-surface-800/50 p-4 rounded-xl border border-surface-200 dark:border-surface-700">
                     {!selectedPatient ? (
-                        <div className="flex gap-2 relative">
-                            <div className="relative flex-1">
+                         <div className="flex gap-2">
+                             <div className="relative flex-1">
                                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-surface-400" size={18} />
-                                <input
+                                <input 
                                     type="text"
-                                    className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-surface-300 dark:border-surface-600 text-surface-900 dark:text-surface-100 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white dark:bg-surface-900 shadow-sm transition-all"
+                                    className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-surface-300 dark:border-surface-600 text-surface-900 dark:text-white placeholder:text-surface-400 focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white dark:bg-surface-900"
                                     placeholder={t('searchPlaceholder')}
                                     value={searchQuery}
                                     onChange={(e) => setSearchQuery(e.target.value)}
                                     autoFocus
+                                    disabled={isReadOnly}
                                 />
                                 {searchQuery && (
-                                    <div className="absolute z-10 top-full left-0 right-0 mt-2 bg-white dark:bg-surface-800 rounded-xl border border-surface-200 dark:border-surface-700 shadow-xl max-h-48 overflow-y-auto">
-                                        {filteredPatients.length > 0 ? filteredPatients.map(p => (
-                                            <button
-                                                key={p.id}
-                                                type="button"
-                                                onClick={() => { setSelectedPatient(p); setSearchQuery(''); setIsDirectoryOpen(false); }}
-                                                className="w-full text-left px-4 py-3 hover:bg-surface-50 dark:hover:bg-surface-700 border-b border-surface-100 dark:border-surface-700 last:border-0 transition-colors"
+                                    <div className="absolute top-full left-0 right-0 mt-2 bg-white dark:bg-surface-800 rounded-xl border border-surface-200 dark:border-surface-700 shadow-xl z-20 max-h-48 overflow-y-auto custom-scrollbar">
+                                        {filteredPatients.map(p => (
+                                            <div 
+                                                key={p.id} 
+                                                onClick={() => handleSelectPatient(p)}
+                                                className="px-4 py-3 hover:bg-surface-50 dark:hover:bg-surface-700 cursor-pointer flex items-center justify-between border-b border-surface-100 dark:border-surface-700 last:border-0"
                                             >
-                                                <div className="text-sm font-medium text-surface-900 dark:text-white">{p.name}</div>
-                                                <div className="text-xs text-surface-500 dark:text-surface-400 flex items-center gap-1"><Phone size={12} /> {p.phone}</div>
-                                            </button>
-                                        )) : (
-                                            <div className="px-4 py-3 text-xs text-surface-400 text-center">{t('noPatientsFound')}</div>
+                                                <div>
+                                                    <div className="font-bold text-surface-900 dark:text-white">{p.name}</div>
+                                                    <div className="text-xs text-surface-500">{p.phone}</div>
+                                                </div>
+                                                <User size={16} className="text-surface-400" />
+                                            </div>
+                                        ))}
+                                        {filteredPatients.length === 0 && (
+                                            <div className="p-4 text-center text-sm text-surface-400 italic">
+                                                {t('noPatientsFound')}
+                                            </div>
                                         )}
                                     </div>
                                 )}
-                            </div>
-                            <Button type="button" variant="secondary" onClick={() => setIsDirectoryOpen(true)}>
-                                <BookUser size={20} className="text-surface-600 dark:text-surface-300" />
-                            </Button>
-                        </div>
+                             </div>
+                             <Button type="button" onClick={() => setIsDirectoryOpen(true)} className="px-3" disabled={isReadOnly} title={t('patientDirectory')}>
+                                <BookUser size={20} />
+                             </Button>
+                         </div>
                     ) : (
-                        <div className="flex items-center justify-between p-3 bg-white dark:bg-surface-800 border border-primary-100 dark:border-primary-900/30 rounded-xl shadow-sm animate-fade-in">
+                        <div className="flex items-start justify-between group">
                             <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 rounded-full bg-primary-100 dark:bg-primary-900/50 flex items-center justify-center text-primary-600 dark:text-primary-400 font-bold">
-                                    {selectedPatient.name.charAt(0)}
+                                <div className="w-12 h-12 rounded-full bg-primary-100 dark:bg-primary-900/40 flex items-center justify-center text-primary-600 dark:text-primary-400 font-bold text-lg">
+                                    {selectedPatient.name.charAt(0).toUpperCase()}
                                 </div>
                                 <div>
-                                    <div className="text-sm font-bold text-surface-900 dark:text-white">{selectedPatient.name}</div>
-                                    <div className="text-xs text-surface-500 dark:text-surface-400 flex items-center gap-2">
-                                        {selectedPatient.phone}
-                                        <button
-                                            onClick={(e) => openWhatsApp(e, selectedPatient.phone)}
-                                            className="text-green-500 hover:text-green-600 transition-colors"
-                                            title="Chat on WhatsApp"
-                                        >
-                                            <MessageCircle size={12} />
+                                    <h4 className="font-bold text-surface-900 dark:text-white text-lg">{selectedPatient.name}</h4>
+                                    <div className="flex items-center gap-3 text-sm text-surface-500 dark:text-surface-400">
+                                        <span className="flex items-center gap-1"><Phone size={14}/> {selectedPatient.phone}</span>
+                                        <button onClick={(e) => openWhatsApp(e, selectedPatient.phone)} className="text-green-500 hover:text-green-600" title="WhatsApp">
+                                            <MessageCircle size={16} />
                                         </button>
                                     </div>
                                 </div>
                             </div>
-                            <button type="button" onClick={() => setSelectedPatient(null)} className="p-2 text-surface-400 hover:text-red-500 hover:bg-surface-50 dark:hover:bg-surface-700 rounded-lg transition-colors"><X size={18} /></button>
+                            {!isReadOnly && (
+                                <button onClick={() => setSelectedPatient(null)} className="p-2 text-surface-400 hover:text-red-500 hover:bg-surface-100 dark:hover:bg-surface-700 rounded-lg transition-colors">
+                                    <X size={18} />
+                                </button>
+                            )}
                         </div>
                     )}
                 </div>
-            </section>
-
-            <section className="space-y-4">
-                <h3 className="text-xs font-bold text-surface-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
-                    <Activity size={16} className={statusTheme[status].icon}/>
-                    {t('statusAndNotes')}
-                </h3>
-                
-                {status === 'completed' ? (
-                    <div className="flex items-center gap-2 p-3 bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-xl text-purple-700 dark:text-purple-300">
-                        <CheckCircle size={18} />
-                        <span className="font-bold text-sm">{t('appointmentCompleted')}</span>
-                        <span className="text-xs opacity-70 ml-auto">({t('readOnly')})</span>
-                    </div>
-                ) : (
-                    <div className="flex p-1 bg-surface-100 dark:bg-surface-800 rounded-xl overflow-x-auto">
-                        {(['confirmed', 'pending'] as const).map(s => (
-                            <button
-                                key={s} type="button" onClick={() => setStatus(s)}
-                                className={cn("flex-1 py-2 px-3 text-sm font-medium rounded-lg capitalize transition-all duration-200 whitespace-nowrap", status === s ? statusTheme[s].active : statusTheme[s].inactive)}
-                            >
-                                {/* @ts-ignore */}
-                                {t(s)}
-                            </button>
-                        ))}
-                    </div>
-                )}
-
-                <div className="relative">
-                    <FileText className={cn("absolute left-3 top-3 transition-colors", statusTheme[status].icon)} size={18} />
-                    <textarea
-                        className={cn(
-                            "w-full pl-10 pr-4 py-3 border rounded-xl outline-none min-h-[120px] text-sm resize-none bg-white dark:bg-surface-900 text-surface-900 dark:text-surface-100 transition-all",
-                            "border-surface-300 dark:border-surface-700",
-                            statusTheme[status].focusRing
-                        )}
-                        value={observation} onChange={e => setObservation(e.target.value)}
-                        placeholder={t('notesPlaceholder')}
-                        disabled={status === 'completed'}
-                    />
-                </div>
-            </section>
-        </div>
-
-        <div className="hidden lg:block w-px bg-surface-200 dark:bg-surface-700" />
-        <div className="lg:hidden h-px w-full bg-surface-200 dark:bg-surface-700" />
-
-        {/* Right Column */}
-        <div className="flex-1 flex flex-col gap-4">
-            <h3 className="text-xs font-bold text-surface-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
-                <CalendarIcon size={16} className="text-primary-600 dark:text-primary-400"/>
-                {t('dateTime')}
-            </h3>
-
-            <div className="relative mb-2">
-                <CalendarIcon className="absolute left-4 top-1/2 -translate-y-1/2 text-surface-500 dark:text-surface-400 pointer-events-none" size={18} />
-                <input 
-                    type="date" required
-                    className="flex h-12 w-full rounded-xl border border-surface-300 dark:border-surface-600 bg-white dark:bg-surface-900 pl-12 px-4 text-sm font-medium text-surface-900 dark:text-white shadow-sm focus:outline-none focus:ring-2 focus:ring-primary-500 cursor-pointer transition-colors"
-                    value={selectedDate} 
-                    onChange={e => { setSelectedDate(e.target.value); setSelectedSlots([]); }}
-                    disabled={status === 'completed'}
-                />
             </div>
 
-            <div className="flex-1 flex flex-col bg-surface-50 dark:bg-surface-800/50 rounded-xl border border-surface-200 dark:border-surface-700 overflow-hidden min-h-[350px]">
-                <div className="px-4 py-3 border-b border-surface-200 dark:border-surface-700 bg-white dark:bg-surface-800 flex items-center justify-between text-xs">
-                     <span className="font-medium text-surface-500 dark:text-surface-400 uppercase tracking-wide">{t('availableSlots')}</span>
-                     <div className="flex gap-2">
-                        <span className="flex items-center gap-1 text-surface-600 dark:text-surface-400"><Lock size={10} /> {t('locked')}</span>
-                        <span className="flex items-center gap-1 text-surface-600 dark:text-surface-400"><CheckCircle size={10} /> {t('done')}</span>
-                     </div>
+            {/* Section: Status & Notes */}
+            <div className="flex flex-col gap-3 flex-1">
+                 <div className="flex items-center gap-2 text-surface-900 dark:text-white font-semibold border-b border-surface-100 dark:border-surface-700 pb-2">
+                    <Activity size={18} className={statusTheme.text} />
+                    <h3>{t('statusAndNotes')}</h3>
                 </div>
-                
-                <div className="flex-1 p-4 overflow-y-auto custom-scrollbar relative">
-                     {!selectedDate && (
-                        <div className="absolute inset-0 flex flex-col items-center justify-center bg-white/60 dark:bg-surface-900/60 backdrop-blur-[1px] z-10 text-surface-400">
-                            <CalendarIcon size={32} className="mb-2 opacity-50" />
-                            <span className="text-sm font-medium">{t('selectDateFirst')}</span>
-                        </div>
-                    )}
 
-                    <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
-                        {timeSlots.map((slot) => {
-                            const { status: slotStatus } = checkSlotStatus(selectedDate, slot);
-                            const isSelected = selectedSlots.includes(slot);
-                            const isConfirmed = slotStatus === 'confirmed';
-                            const isCompleted = slotStatus === 'completed';
-                            const isPending = slotStatus === 'pending' && !isSelected;
-                            
-                            // Determine style
-                            let baseClass = "bg-white dark:bg-surface-900 text-surface-600 dark:text-surface-300 border-surface-200 dark:border-surface-700 hover:border-primary-300 hover:text-primary-600 dark:hover:text-primary-400";
-                            if (isSelected) baseClass = "bg-primary-600 text-white border-primary-600 shadow-md scale-105 z-10";
-                            else if (isConfirmed) baseClass = "bg-surface-100 dark:bg-surface-800 text-surface-400 dark:text-surface-600 border-transparent cursor-not-allowed";
-                            else if (isCompleted) baseClass = "bg-purple-50 dark:bg-purple-900/20 text-purple-400 dark:text-purple-600 border-purple-100 dark:border-purple-800 cursor-not-allowed";
-                            else if (isPending) baseClass = "bg-white dark:bg-surface-900 text-surface-400 border-orange-200 dark:border-orange-900/50 border-dashed cursor-not-allowed";
-
-                            const isLocked = status === 'completed';
-
-                            return (
+                <div className={cn("flex-1 rounded-xl border p-4 flex flex-col gap-4 transition-colors", statusTheme.bg, statusTheme.border)}>
+                     {isReadOnly ? (
+                         <div className="flex items-center gap-2 text-purple-700 dark:text-purple-400 font-bold bg-purple-100 dark:bg-purple-900/30 p-3 rounded-lg justify-center">
+                             <CheckCircle size={20} />
+                             {t('appointmentCompleted')}
+                         </div>
+                     ) : (
+                         <div className="grid grid-cols-2 gap-3">
+                            {(['confirmed', 'pending'] as const).map(s => (
                                 <button
-                                    key={slot} type="button" disabled={isConfirmed || isPending || isCompleted || isLocked} onClick={() => toggleSlot(slot)}
+                                    key={s}
+                                    type="button"
+                                    onClick={() => setStatus(s)}
                                     className={cn(
-                                        "py-2 px-1 text-xs font-medium rounded-lg border transition-all duration-150 relative flex items-center justify-center",
-                                        baseClass
+                                        "py-2.5 px-4 rounded-lg text-sm font-bold border transition-all flex items-center justify-center gap-2",
+                                        status === s 
+                                            ? "ring-2 ring-offset-1 dark:ring-offset-surface-900 shadow-sm transform scale-[1.02]" 
+                                            : "bg-white dark:bg-surface-900 border-surface-200 dark:border-surface-700 text-surface-500 hover:bg-surface-50 dark:hover:bg-surface-800",
+                                        status === s && s === 'confirmed' ? "bg-green-500 text-white border-green-600 ring-green-500" : "",
+                                        status === s && s === 'pending' ? "bg-orange-500 text-white border-orange-600 ring-orange-500" : ""
                                     )}
                                 >
-                                    {isConfirmed && <Lock size={10} className="mr-1 opacity-70" />}
-                                    {isCompleted && <CheckCircle size={10} className="mr-1 opacity-70" />}
-                                    {slot}
-                                    {isPending && <div className="absolute top-1 right-1 w-1.5 h-1.5 bg-orange-400 rounded-full" />}
+                                    {status === s && <CheckCircle size={14} />}
+                                    {/* @ts-ignore */}
+                                    {t(s)}
                                 </button>
-                            );
-                        })}
+                            ))}
+                         </div>
+                     )}
+
+                     <div className="relative flex-1">
+                        <textarea
+                            className={cn(
+                                "w-full h-full min-h-[100px] p-3 rounded-lg border bg-white dark:bg-surface-900 text-sm focus:outline-none focus:ring-2 resize-none text-surface-900 dark:text-white",
+                                isReadOnly ? "opacity-75 cursor-not-allowed" : "",
+                                statusTheme.border,
+                                statusTheme.ring
+                            )}
+                            placeholder={t('notesPlaceholder')}
+                            value={observation}
+                            onChange={(e) => setObservation(e.target.value)}
+                            disabled={isReadOnly}
+                        />
+                        <FileText size={16} className="absolute bottom-3 right-3 text-surface-300 pointer-events-none" />
+                     </div>
+                </div>
+            </div>
+
+        </div>
+
+        {/* Right Column: Schedule */}
+        <div className="flex-1 flex flex-col gap-4 min-w-[300px]">
+            <div className="flex items-center justify-between border-b border-surface-100 dark:border-surface-700 pb-2">
+                <div className="flex items-center gap-2 text-surface-900 dark:text-white font-semibold">
+                    <CalendarIcon size={18} className="text-primary-500" />
+                    <h3>{t('dateTime')}</h3>
+                </div>
+                <div className="flex items-center gap-2 text-xs">
+                     <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-surface-200 dark:bg-surface-700" /> {t('availableSlots')}</div>
+                     <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-surface-900/50 dark:bg-white/50" /> {t('locked')}</div>
+                </div>
+            </div>
+
+            <div className="flex flex-col gap-4 h-full">
+                <input 
+                    type="date"
+                    className="w-full px-4 py-2.5 rounded-xl border border-surface-300 dark:border-surface-600 bg-white dark:bg-surface-900 text-surface-900 dark:text-white text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    value={selectedDate}
+                    onChange={(e) => {
+                        setSelectedDate(e.target.value);
+                        setSelectedSlots([]);
+                        setValidationError(null);
+                    }}
+                    disabled={isReadOnly}
+                />
+
+                <div className="flex-1 border border-surface-200 dark:border-surface-700 rounded-xl overflow-hidden bg-surface-50 dark:bg-surface-800/50 flex flex-col">
+                    <div className="flex-1 overflow-y-auto custom-scrollbar p-1">
+                        {!selectedDate ? (
+                            <div className="h-full flex flex-col items-center justify-center text-surface-400 dark:text-surface-500 gap-2">
+                                <CalendarIcon size={32} className="opacity-20" />
+                                <p className="text-sm">{t('selectDateFirst')}</p>
+                            </div>
+                        ) : (
+                            <div className="grid grid-cols-4 gap-2 p-2">
+                                {timeSlots.map((slot) => {
+                                    const { status: slotStatus } = checkSlotStatus(selectedDate, slot);
+                                    const isLocked = slotStatus === 'confirmed' || slotStatus === 'completed';
+                                    const isPending = slotStatus === 'pending';
+                                    const isSelected = selectedSlots.includes(slot);
+
+                                    return (
+                                        <button
+                                            key={slot}
+                                            type="button"
+                                            onClick={() => toggleSlot(slot)}
+                                            disabled={isLocked || isReadOnly}
+                                            className={cn(
+                                                "py-2 rounded-lg text-xs font-semibold transition-all relative border",
+                                                isSelected 
+                                                    ? "bg-primary-600 text-white border-primary-700 shadow-md transform scale-105 z-10" 
+                                                    : isLocked 
+                                                        ? "bg-surface-100 dark:bg-surface-800 text-surface-400 border-transparent cursor-not-allowed" 
+                                                        : isPending
+                                                            ? "bg-white dark:bg-surface-800 text-surface-400 border-orange-200 dark:border-orange-900/50 cursor-not-allowed opacity-60"
+                                                            : "bg-white dark:bg-surface-800 text-surface-700 dark:text-surface-300 border-surface-200 dark:border-surface-700 hover:border-primary-300 hover:shadow-sm",
+                                            )}
+                                        >
+                                            {isLocked && <Lock size={10} className="absolute top-1 right-1 opacity-50" />}
+                                            {slot}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </div>
+                    
+                    {/* Time Selection Footer */}
+                    <div className="bg-white dark:bg-surface-800 border-t border-surface-200 dark:border-surface-700 p-3 flex justify-between items-center text-xs font-medium text-surface-600 dark:text-surface-400 mt-auto">
+                        <span>{selectedSlots.length} {t('slotsCount')}</span>
+                        {timeRangeDisplay && (
+                            <span className="font-bold text-primary-600 dark:text-primary-400 bg-primary-50 dark:bg-primary-900/20 px-2 py-0.5 rounded">
+                                {timeRangeDisplay}
+                            </span>
+                        )}
+                        <span>{selectedSlots.length * 30} {t('mins')}</span>
                     </div>
                 </div>
-                <div className="p-3 bg-white dark:bg-surface-800 border-t border-surface-200 dark:border-surface-700 flex items-center justify-between text-xs text-surface-500 dark:text-surface-400">
-                    <div className="flex items-center gap-2"><Clock size={14} className="text-primary-500"/> <span>{selectedSlots.length > 0 ? `${selectedSlots.length} ${t('slotsCount')}` : 'None'}</span></div>
-                    {selectedSlots.length > 0 && <span className="font-semibold text-surface-900 dark:text-white">{selectedSlots.length * 30} {t('mins')}</span>}
-                </div>
-            </div>
-
-            <div className="flex justify-end gap-3 pt-2 items-center w-full mt-auto">
-                <Button type="button" variant="ghost" onClick={onClose}>{t('close')}</Button>
-                {initialAppointment && initialAppointment.status !== 'canceled' && status !== 'completed' && (
-                    <Button type="button" variant="danger" onClick={(e) => { e.preventDefault(); setShowCancelConfirm(true); }} className="gap-2"><Trash2 size={16} /> {t('cancelBooking')}</Button>
-                )}
-                {status !== 'completed' && (
-                    <Button type="submit" className="px-6 shadow-lg shadow-primary-200 dark:shadow-none">{t('saveAppointment')}</Button>
-                )}
             </div>
         </div>
-      </form>
-    </Modal>
-    
-    <PatientDirectoryModal isOpen={isDirectoryOpen} onClose={() => setIsDirectoryOpen(false)} onSelect={(p) => { setSelectedPatient(p); setIsDirectoryOpen(false); setSearchQuery(''); }} />
 
-    <Modal isOpen={showCancelConfirm} onClose={() => setShowCancelConfirm(false)} title={t('cancelConfirmTitle')} maxWidth="sm">
-        <div className="text-center p-2 dark:text-white">
-            <div className="w-12 h-12 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center mx-auto mb-4 text-red-600 dark:text-red-400"><AlertTriangle size={24} /></div>
-            <h3 className="text-lg font-bold mb-2">{t('cancelConfirmTitle')}?</h3>
-            <p className="text-surface-500 dark:text-surface-400 mb-6">{t('cancelConfirmMessage')}</p>
+        {/* Directory Modal */}
+        <PatientDirectoryModal
+            isOpen={isDirectoryOpen}
+            onClose={() => setIsDirectoryOpen(false)}
+            onSelect={handleSelectPatient}
+        />
+      </form>
+
+      {/* Footer Actions */}
+      <div className="pt-4 mt-auto border-t border-surface-100 dark:border-surface-700 flex justify-between items-center">
+         {initialAppointment && !isReadOnly && initialAppointment.status !== 'canceled' ? (
+             <Button type="button" variant="danger" onClick={handleCancelBooking} className="gap-2">
+                 <Trash2 size={16} /> {t('cancelBooking')}
+             </Button>
+         ) : <div></div>}
+         
+         <div className="flex items-center gap-4">
+            {validationError && (
+                <div className="text-red-600 dark:text-red-400 text-sm font-medium flex items-center gap-1.5 bg-red-50 dark:bg-red-900/20 px-3 py-1.5 rounded-lg animate-pulse">
+                    <AlertTriangle size={14} />
+                    {validationError}
+                </div>
+            )}
+            <div className="flex gap-3">
+                <Button type="button" variant="ghost" onClick={onClose}>{t('close')}</Button>
+                {!isReadOnly && (
+                    <Button onClick={handleSubmit} className="min-w-[140px]">
+                        {initialAppointment ? t('done') : t('saveAppointment')}
+                    </Button>
+                )}
+            </div>
+         </div>
+      </div>
+
+      {/* Cancel Confirmation Modal */}
+      <Modal 
+        isOpen={showCancelConfirm} 
+        onClose={() => setShowCancelConfirm(false)}
+        title={t('cancelConfirmTitle')}
+        maxWidth="sm"
+      >
+        <div className="text-center p-4">
+             <div className="w-16 h-16 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center mx-auto mb-4 text-red-600 dark:text-red-400">
+                <AlertTriangle size={32} />
+            </div>
+            <h3 className="text-lg font-bold text-surface-900 dark:text-white mb-2">{t('cancelConfirmTitle')}</h3>
+            <p className="text-surface-500 dark:text-surface-400 mb-6">
+                {t('cancelConfirmMessage')}
+            </p>
             <div className="flex gap-3">
                 <Button variant="secondary" className="flex-1" onClick={() => setShowCancelConfirm(false)}>{t('keepIt')}</Button>
-                <Button variant="danger" className="flex-1" onClick={() => { onSubmit({ ...initialAppointment, status: 'canceled' }); onClose(); }}>{t('confirmCancel')}</Button>
+                <Button variant="danger" className="flex-1" onClick={confirmCancelBooking}>{t('confirmCancel')}</Button>
             </div>
         </div>
-    </Modal>
+      </Modal>
 
-    <Modal isOpen={!!pendingConflictIds} onClose={() => setPendingConflictIds(null)} title={t('overwriteTitle')} maxWidth="sm">
-         <div className="text-center p-2 dark:text-white">
-            <div className="w-12 h-12 bg-orange-100 dark:bg-orange-900/30 rounded-full flex items-center justify-center mx-auto mb-4 text-orange-600 dark:text-orange-400"><AlertTriangle size={24} /></div>
-            <h3 className="text-lg font-bold mb-2">{t('overwriteTitle')}</h3>
-            <p className="text-surface-500 dark:text-surface-400 mb-6">{t('overwriteMessage')}</p>
+      {/* Overwrite Confirmation Modal */}
+      <Modal 
+        isOpen={showOverwriteConfirm} 
+        onClose={() => setShowOverwriteConfirm(false)}
+        title={t('overwriteTitle')}
+        maxWidth="sm"
+      >
+        <div className="text-center p-4">
+             <div className="w-16 h-16 bg-orange-100 dark:bg-orange-900/30 rounded-full flex items-center justify-center mx-auto mb-4 text-orange-600 dark:text-orange-400">
+                <Activity size={32} />
+            </div>
+            <h3 className="text-lg font-bold text-surface-900 dark:text-white mb-2">{t('overwriteTitle')}</h3>
+            <p className="text-surface-500 dark:text-surface-400 mb-6">
+                {t('overwriteMessage')}
+            </p>
             <div className="flex gap-3">
-                <Button variant="secondary" className="flex-1" onClick={() => setPendingConflictIds(null)}>{t('cancel')}</Button>
-                <Button className="flex-1" onClick={() => submitFinal(pendingConflictIds || [])}>{t('overwrite')}</Button>
+                <Button variant="secondary" className="flex-1" onClick={() => setShowOverwriteConfirm(false)}>{t('cancel')}</Button>
+                <Button className="flex-1 bg-orange-600 hover:bg-orange-700 text-white" onClick={confirmOverwrite}>{t('overwrite')}</Button>
             </div>
         </div>
+      </Modal>
     </Modal>
-    </>
   );
 };

@@ -1,10 +1,12 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { Modal } from '../../../components/ui/Modal';
-import { Patient, Appointment, Invoice } from '../../../types';
+import { Patient, Appointment, Invoice, Radio } from '../../../types';
 import { formatDate, formatTime, cn } from '../../../lib/utils';
-import { Phone, Mail, Calendar, Clock, FileText, Pencil, History, ArrowUpRight, ArrowLeft, MessageCircle, Receipt, Maximize2 } from 'lucide-react';
+import { Phone, Mail, Calendar, Clock, FileText, Pencil, History, ArrowUpRight, ArrowLeft, MessageCircle, Receipt, Maximize2, Image as ImageIcon } from 'lucide-react';
 import { Button } from '../../../components/ui/Button';
 import { useLanguage } from '../../language/LanguageContext';
+import { RadiologyGalleryModal } from './RadiologyGalleryModal';
+import { api } from '../../../lib/api';
 
 interface PatientDetailsModalProps {
   isOpen: boolean;
@@ -31,12 +33,21 @@ export const PatientDetailsModal: React.FC<PatientDetailsModalProps> = ({
   const [currentProfilePic, setCurrentProfilePic] = useState<string | undefined>(patient?.profilePicture);
   const [showAllAppointments, setShowAllAppointments] = useState(false);
   const [showAllInvoices, setShowAllInvoices] = useState(false);
+  
+  // Radiology State
+  const [radios, setRadios] = useState<Radio[]>([]);
+  const [showRadiologyGallery, setShowRadiologyGallery] = useState(false);
 
-  React.useEffect(() => {
+  useEffect(() => {
     setCurrentProfilePic(patient?.profilePicture);
     setShowAllAppointments(false);
     setShowAllInvoices(false);
-  }, [patient]);
+    
+    // Fetch radios when patient opens
+    if (patient && isOpen) {
+        api.radios.list(patient.id).then(setRadios);
+    }
+  }, [patient, isOpen]);
 
   const filteredAppointments = useMemo(() => {
     if (!patient) return { upcoming: [], past: [] };
@@ -277,6 +288,49 @@ export const PatientDetailsModal: React.FC<PatientDetailsModalProps> = ({
                 </div>
             </div>
 
+            {/* Radiology Preview */}
+            <div className="flex flex-col relative">
+                <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    className="absolute -top-1 right-0 text-surface-400 hover:text-primary-600 z-10"
+                    onClick={() => setShowRadiologyGallery(true)}
+                    title={t('radiologyGallery')}
+                 >
+                    <Maximize2 size={16} />
+                 </Button>
+
+                <h3 className="text-xs font-bold text-surface-500 dark:text-surface-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+                    <ImageIcon size={14} className="text-surface-400"/>
+                    {t('radiologyPreview')}
+                </h3>
+
+                <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-none">
+                    {radios.length > 0 ? (
+                         radios.slice(0, 4).map(radio => (
+                             <div 
+                                key={radio.id} 
+                                onClick={() => setShowRadiologyGallery(true)}
+                                className="w-24 h-24 shrink-0 bg-black rounded-lg border border-surface-200 dark:border-surface-700 overflow-hidden cursor-pointer hover:opacity-90 transition-opacity"
+                             >
+                                <img src={radio.url} alt="X-ray" className="w-full h-full object-cover" />
+                             </div>
+                         ))
+                    ) : (
+                         <div className="w-full bg-surface-50 dark:bg-surface-800/50 rounded-xl p-4 text-center text-surface-400 border border-dashed border-surface-200 dark:border-surface-700">
+                            <p className="text-sm">{t('noRadios')}</p>
+                        </div>
+                    )}
+                     <button 
+                        onClick={() => setShowRadiologyGallery(true)}
+                        className="w-24 h-24 shrink-0 flex flex-col items-center justify-center gap-1 rounded-lg border-2 border-dashed border-primary-200 dark:border-primary-800 bg-primary-50 dark:bg-primary-900/10 text-primary-600 dark:text-primary-400 hover:bg-primary-100 dark:hover:bg-primary-900/30 transition-colors"
+                     >
+                         <ImageIcon size={20} />
+                         <span className="text-[10px] font-bold">{t('uploadImage')}</span>
+                     </button>
+                </div>
+            </div>
+
             {/* Financials Row */}
             <div className="flex flex-col relative">
                 <Button 
@@ -388,6 +442,18 @@ export const PatientDetailsModal: React.FC<PatientDetailsModalProps> = ({
             <Button variant="ghost" onClick={() => setShowAllInvoices(false)}>{t('close')}</Button>
         </div>
     </Modal>
+
+    {/* SUB-MODAL: Radiology Gallery */}
+    {showRadiologyGallery && patient && (
+        <RadiologyGalleryModal
+            isOpen={showRadiologyGallery}
+            onClose={() => setShowRadiologyGallery(false)}
+            patientId={patient.id}
+            radios={radios}
+            onUploadSuccess={(newRadio) => setRadios(prev => [newRadio, ...prev])}
+            onDelete={(id) => setRadios(prev => prev.filter(r => r.id !== id))}
+        />
+    )}
     </>
   );
 };
